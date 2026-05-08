@@ -2,6 +2,9 @@
 
 BackType is an After Effects text effect for edit-style typing animations. It types text forward while the text pushes backward, so the newest character can stay near the same spot.
 
+<img width="2500" height="1080" alt="BackType" src="https://github.com/user-attachments/assets/16a92092-1de8-40e7-ac6f-0d628e239394" />
+
+
 ## What it does
 
 - Renders typewriter-style text
