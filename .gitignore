@@ -1,0 +1,6 @@
+build/*
+!build/.gitkeep
+dist/
+.DS_Store
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcuserstate

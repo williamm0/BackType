@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+VERSION="0.1.0"
+DIST_DIR="$ROOT_DIR/dist"
+STAGING_DIR="$ROOT_DIR/build/release-staging"
+
+WINDOWS_ARTIFACT="${WINDOWS_ARTIFACT:-}"
+MACOS_ARTIFACT="${MACOS_ARTIFACT:-}"
+
+find_artifact() {
+  local pattern="$1"
+  find "$ROOT_DIR/build" -name "$pattern" -print -quit 2>/dev/null || true
+}
+
+if [[ -z "$WINDOWS_ARTIFACT" ]]; then
+  WINDOWS_ARTIFACT="$(find_artifact 'BackType.aex')"
+fi
+
+if [[ -z "$MACOS_ARTIFACT" ]]; then
+  MACOS_ARTIFACT="$(find_artifact 'BackType.plugin')"
+fi
+
+rm -rf "$STAGING_DIR"
+mkdir -p "$DIST_DIR" "$STAGING_DIR"
+
+missing=0
+
+if [[ -n "$WINDOWS_ARTIFACT" && -f "$WINDOWS_ARTIFACT" ]]; then
+  win_stage="$STAGING_DIR/windows"
+  mkdir -p "$win_stage"
+  cp "$WINDOWS_ARTIFACT" "$win_stage/BackType.aex"
+  cp "$ROOT_DIR/README.md" "$win_stage/README.md"
+  [[ -f "$ROOT_DIR/LICENSE" ]] && cp "$ROOT_DIR/LICENSE" "$win_stage/LICENSE"
+  (cd "$win_stage" && zip -qr "$DIST_DIR/BackType-v${VERSION}-Windows.zip" .)
+else
+  echo "Missing Windows artifact: BackType.aex"
+  missing=1
+fi
+
+if [[ -n "$MACOS_ARTIFACT" && -d "$MACOS_ARTIFACT" ]]; then
+  mac_stage="$STAGING_DIR/macos"
+  mkdir -p "$mac_stage"
+  ditto "$MACOS_ARTIFACT" "$mac_stage/BackType.plugin"
+  cp "$ROOT_DIR/README.md" "$mac_stage/README.md"
+  [[ -f "$ROOT_DIR/LICENSE" ]] && cp "$ROOT_DIR/LICENSE" "$mac_stage/LICENSE"
+  (cd "$mac_stage" && ditto -c -k --sequesterRsrc --keepParent BackType.plugin "$DIST_DIR/BackType-v${VERSION}-macOS.zip")
+  (cd "$mac_stage" && zip -qur "$DIST_DIR/BackType-v${VERSION}-macOS.zip" README.md LICENSE 2>/dev/null || true)
+else
+  echo "Missing macOS artifact: BackType.plugin"
+  missing=1
+fi
+
+if [[ "$missing" -ne 0 ]]; then
+  echo "Release zips were not completed because one or more compiled plugin artifacts are missing."
+  exit 1
+fi
+
+echo "Created:"
+echo "  $DIST_DIR/BackType-v${VERSION}-Windows.zip"
+echo "  $DIST_DIR/BackType-v${VERSION}-macOS.zip"
