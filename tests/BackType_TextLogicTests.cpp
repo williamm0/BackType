@@ -45,6 +45,9 @@ int main() {
     expect_eq(visible_word_character_count("hello brave world", 100.0), 17, "word mode reveals all words");
 
     const TextBounds bounds{120.0, 40.0};
+    const LayoutInput default_layout{};
+    expect_true(default_layout.anchor_mode == AnchorMode::CenterLocked, "default anchor mode is center locked");
+
     const LayoutInput newest_left{AnchorMode::NewestCharacterLocked, Direction::MoveLeft, 200.0, 100.0, 100.0};
     const DrawPosition newest_left_pos = compute_draw_position(newest_left, bounds, bounds);
     expect_near(newest_left_pos.x, 80.0, 0.001, "newest locked move-left shifts by visible width");

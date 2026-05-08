@@ -4,6 +4,7 @@ namespace backtype_strings {
 
 extern const char *kAbout;
 extern const char *kText;
+extern const char *kTextSource;
 extern const char *kProgress;
 extern const char *kFontSize;
 extern const char *kTextColor;

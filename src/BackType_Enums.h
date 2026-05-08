@@ -21,4 +21,9 @@ enum class RevealMode {
     Word = 2
 };
 
+enum class TextSource {
+    PluginText = 1,
+    LayerText = 2
+};
+
 } // namespace backtype

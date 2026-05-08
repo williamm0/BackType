@@ -13,7 +13,7 @@ struct TextBounds {
 };
 
 struct LayoutInput {
-    AnchorMode anchor_mode = AnchorMode::NewestCharacterLocked;
+    AnchorMode anchor_mode = AnchorMode::CenterLocked;
     Direction direction = Direction::MoveLeft;
     double position_x = 0.0;
     double position_y = 0.0;

@@ -54,6 +54,45 @@ AlphaBounds find_alpha_bounds(const std::vector<std::uint8_t> &pixels, int width
     return bounds;
 }
 
+AlphaBounds render_bounds_for_text(const std::string &text, double progress) {
+    constexpr int kWidth = 640;
+    constexpr int kHeight = 360;
+    constexpr int kRowbytes = kWidth * 4;
+    constexpr double kFontSize = 72.0;
+    constexpr double kAnchorX = kWidth * 0.5;
+    constexpr double kAnchorY = kHeight * 0.5;
+
+    std::vector<std::uint8_t> pixels(static_cast<std::size_t>(kHeight * kRowbytes), 0);
+    backtype::PixelBuffer target{pixels.data(), kWidth, kHeight, kRowbytes, backtype::PixelFormat::Argb8};
+    backtype::clear_target(target);
+
+    const std::string visible = backtype::visible_text(text, progress, backtype::RevealMode::Character);
+    if (visible.empty()) {
+        return {};
+    }
+
+    const backtype::TextMetrics visible_metrics = backtype::measure_text(visible, kFontSize);
+    const backtype::TextMetrics full_metrics = backtype::measure_text(text, kFontSize);
+    const backtype::DrawPosition draw_position = backtype::compute_draw_position(
+        {backtype::AnchorMode::CenterLocked,
+         backtype::Direction::MoveLeft,
+         kAnchorX,
+         kAnchorY,
+         100.0},
+        {visible_metrics.width, full_metrics.height},
+        {full_metrics.width, full_metrics.height});
+
+    backtype::render_text(target,
+                          {visible,
+                           draw_position.x,
+                           draw_position.y,
+                           kFontSize,
+                           {1.0, 1.0, 1.0, 1.0},
+                           1.0});
+
+    return find_alpha_bounds(pixels, kWidth, kHeight, kRowbytes);
+}
+
 } // namespace
 
 int main() {
@@ -116,6 +155,39 @@ int main() {
                 ", anchorX=" + std::to_string(kAnchorX) +
                 ", drawX=" + std::to_string(draw_position.x) +
                 ", metricsWidth=" + std::to_string(visible_metrics.width) + ")");
+
+    const std::string descender_cases[] = {
+        "yyyy",
+        "typing",
+        "BackType",
+        "jumping quickly",
+        "gypqj",
+        "hello",
+        "hello y"};
+
+    for (const auto &sample : descender_cases) {
+        bool have_reference = false;
+        double reference_center_y = 0.0;
+
+        for (double progress = 10.0; progress <= 100.0; progress += 10.0) {
+            const AlphaBounds bounds = render_bounds_for_text(sample, progress);
+            if (!bounds.found) {
+                continue;
+            }
+
+            const double center_y = (bounds.min_y + bounds.max_y) * 0.5;
+            if (!have_reference) {
+                reference_center_y = center_y;
+                have_reference = true;
+            } else {
+                expect_true(std::fabs(center_y - reference_center_y) < 16.0,
+                            "descenders should not cause vertical popping for " + sample +
+                            " at progress " + std::to_string(progress) +
+                            " (reference=" + std::to_string(reference_center_y) +
+                            ", center=" + std::to_string(center_y) + ")");
+            }
+        }
+    }
 
     std::cout << "BackType_RenderSmoke passed\n";
     return 0;

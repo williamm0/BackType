@@ -4,7 +4,7 @@ if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin" AND NOT DEFINED CMAKE_OSX_ARCHITECTU
     set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "macOS architectures")
 endif()
 
-project(BackType VERSION 0.1.0 LANGUAGES CXX)
+project(BackType VERSION 0.1.1 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -23,6 +23,12 @@ if(BACKTYPE_BUILD_TESTS)
         src/BackType_TextLogic.cpp
     )
     target_include_directories(backtype_text_logic_tests PRIVATE src)
+
+    add_executable(backtype_text_data_tests
+        tests/BackType_TextDataTests.cpp
+        src/BackType_TextData.cpp
+    )
+    target_include_directories(backtype_text_data_tests PRIVATE src)
 
     if(APPLE)
         add_executable(backtype_render_smoke
@@ -79,11 +85,14 @@ message(STATUS "Using AE SDK examples directory: ${BACKTYPE_AE_SDK_EXAMPLES_DIR}
 set(BACKTYPE_COMMON_SOURCES
     src/BackType.cpp
     src/BackType_Strings.cpp
+    src/BackType_TextData.cpp
     src/BackType_TextLogic.cpp
+    "${BACKTYPE_AE_SDK_EXAMPLES_DIR}/Util/AEFX_SuiteHelper.c"
 )
 
 set(BACKTYPE_SDK_INCLUDE_DIRS
     "${BACKTYPE_AE_SDK_EXAMPLES_DIR}/Headers"
+    "${BACKTYPE_AE_SDK_EXAMPLES_DIR}/Headers/SP"
     "${BACKTYPE_AE_SDK_EXAMPLES_DIR}/Resources"
     "${BACKTYPE_AE_SDK_EXAMPLES_DIR}/Util"
 )
