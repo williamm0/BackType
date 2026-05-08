@@ -82,4 +82,4 @@ Still rough:
 
 ## License
 
-No license has been chosen yet.
+MIT. See `LICENSE`.
