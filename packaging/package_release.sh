@@ -2,12 +2,13 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-VERSION="0.1.2-pre.1"
+VERSION="0.1.2-pre.2"
 DIST_DIR="$ROOT_DIR/dist"
 STAGING_DIR="$ROOT_DIR/build/release-staging"
 
 WINDOWS_ARTIFACT="${WINDOWS_ARTIFACT:-}"
 MACOS_ARTIFACT="${MACOS_ARTIFACT:-}"
+EXPECT_WINDOWS="${EXPECT_WINDOWS:-0}"
 
 find_artifact() {
   local pattern="$1"
@@ -20,7 +21,7 @@ find_artifact() {
   return 0
 }
 
-if [[ -z "$WINDOWS_ARTIFACT" ]]; then
+if [[ "$EXPECT_WINDOWS" == "1" && -z "$WINDOWS_ARTIFACT" ]]; then
   WINDOWS_ARTIFACT="$(find_artifact 'BackType.aex')"
 fi
 
@@ -41,7 +42,7 @@ if [[ -n "$WINDOWS_ARTIFACT" && -f "$WINDOWS_ARTIFACT" ]]; then
   [[ -f "$ROOT_DIR/LICENSE" ]] && cp "$ROOT_DIR/LICENSE" "$win_stage/LICENSE"
   (cd "$win_stage" && zip -qr "$DIST_DIR/BackType-v${VERSION}-Windows.zip" .)
   created=1
-else
+elif [[ "$EXPECT_WINDOWS" == "1" ]]; then
   echo "Missing Windows artifact: BackType.aex"
 fi
 

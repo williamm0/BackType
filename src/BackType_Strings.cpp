@@ -2,9 +2,8 @@
 
 namespace backtype_strings {
 
-const char *kAbout = "BackType v0.1.2\nEdit-style backward typewriter text.";
+const char *kAbout = "BackType v0.1.2-pre.2\nEdit-style backward typewriter text.";
 const char *kText = "Text";
-const char *kTextData = "Text Data";
 const char *kTextSource = "Text Source";
 const char *kProgress = "Progress";
 const char *kFontSize = "Font Size";

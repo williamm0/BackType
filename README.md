@@ -51,13 +51,13 @@ Spaces and basic punctuation are stored in the plugin text data. Empty text rend
 
 You can apply BackType directly to an After Effects text layer.
 
-For v0.1.2-pre.1, the reliable mode is still `Text Source > Plugin Text`. The plugin keeps a `Text Source` control with `Plugin Text` and `Layer Text`, but normal effect render callbacks do not give this plugin a clean, safe source-text read path yet. `Layer Text` is present so the UI is ready for that mode later, but it currently falls back to the plugin's editable text.
+For v0.1.2-pre.2, the reliable mode is still `Text Source > Plugin Text`. You can apply BackType to a solid or directly to an AE text layer, but it does not read the text layer's Source Text yet. `Layer Text` is present so the UI is ready for that mode later, but it currently falls back to the plugin's editable text.
 
 ## Notes
 
 - Center Locked is now the default anchor mode.
 - Descender letters such as `y`, `g`, `j`, `p`, and `q` no longer shift the line upward while typing.
-- v0.1.2 removes the custom Effect Controls text row from v0.1.1 because that path could crash AE on apply. Text editing now uses a normal AE button and a small macOS dialog.
+- v0.1.2-pre.2 removes the hidden arbitrary text parameter too. Text editing now uses a normal AE button, a small macOS dialog, and per-effect sequence data.
 - Unicode text is stored as UTF-8, but font fallback and non-ASCII editing still need more real AE testing.
 - `Pop Amount` is still a parameter, but the render-side pop animation is not finished yet.
 
@@ -67,7 +67,7 @@ There is no Windows release yet. No `.aex` file is included in the current pre-r
 
 ## Current state
 
-This is v0.1.2-pre.1, so treat it as an early build.
+This is v0.1.2-pre.2, so treat it as an early build.
 
 Released target:
 

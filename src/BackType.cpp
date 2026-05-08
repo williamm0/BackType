@@ -21,7 +21,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstdint>
 #include <cstring>
 #include <new>
 #include <string>
@@ -29,7 +28,6 @@
 
 enum BackTypeParam {
     BACKTYPE_INPUT = 0,
-    BACKTYPE_TEXT_DATA,
     BACKTYPE_TEXT,
     BACKTYPE_TEXT_SOURCE,
     BACKTYPE_PROGRESS,
@@ -52,8 +50,7 @@ enum BackTypeParam {
 };
 
 enum BackTypeDiskId {
-    BACKTYPE_TEXT_DATA_DISK_ID = 1,
-    BACKTYPE_TEXT_DISK_ID,
+    BACKTYPE_TEXT_DISK_ID = 1,
     BACKTYPE_TEXT_SOURCE_DISK_ID,
     BACKTYPE_PROGRESS_DISK_ID,
     BACKTYPE_FONT_SIZE_DISK_ID,
@@ -75,14 +72,12 @@ enum BackTypeDiskId {
 
 namespace {
 
-void *const kTextArbitraryRefcon = reinterpret_cast<void *>(static_cast<uintptr_t>(0x42545458));
-
-PF_ArbitraryH create_text_handle(PF_InData *in_data, const std::string &text) {
+PF_Handle create_sequence_handle(PF_InData *in_data, const std::string &text) {
     if (!in_data || !in_data->utils) {
         return nullptr;
     }
 
-    PF_ArbitraryH handle = PF_NEW_HANDLE(sizeof(BackTypeTextData));
+    PF_Handle handle = PF_NEW_HANDLE(sizeof(BackTypeTextData));
     if (!handle) {
         return nullptr;
     }
@@ -98,7 +93,8 @@ PF_ArbitraryH create_text_handle(PF_InData *in_data, const std::string &text) {
     return handle;
 }
 
-std::string text_from_handle(PF_InData *in_data, PF_ArbitraryH handle, const char *fallback) {
+std::string text_from_sequence(PF_InData *in_data, const char *fallback) {
+    PF_Handle handle = in_data ? in_data->sequence_data : nullptr;
     if (!in_data || !handle) {
         return fallback ? fallback : "";
     }
@@ -113,19 +109,19 @@ std::string text_from_handle(PF_InData *in_data, PF_ArbitraryH handle, const cha
     return text;
 }
 
-PF_Err set_text_handle(PF_InData *in_data, PF_ParamDef *param, const std::string &text) {
-    if (!in_data || !param || !param->u.arb_d.value) {
+PF_Err set_sequence_text(PF_InData *in_data, PF_OutData *out_data, const std::string &text) {
+    if (!in_data || !out_data || !in_data->sequence_data) {
         return PF_Err_BAD_CALLBACK_PARAM;
     }
 
-    auto *data = reinterpret_cast<BackTypeTextData *>(PF_LOCK_HANDLE(param->u.arb_d.value));
+    auto *data = reinterpret_cast<BackTypeTextData *>(PF_LOCK_HANDLE(in_data->sequence_data));
     if (!data) {
         return PF_Err_OUT_OF_MEMORY;
     }
 
     backtype::set_text_data(data, text);
-    PF_UNLOCK_HANDLE(param->u.arb_d.value);
-    param->uu.change_flags = PF_ChangeFlag_CHANGED_VALUE;
+    PF_UNLOCK_HANDLE(in_data->sequence_data);
+    out_data->sequence_data = in_data->sequence_data;
     return PF_Err_NONE;
 }
 
@@ -156,6 +152,45 @@ PF_Err global_setup(PF_OutData *out_data) {
     return PF_Err_NONE;
 }
 
+PF_Err sequence_setup(PF_InData *in_data, PF_OutData *out_data) {
+    if (!in_data || !out_data) {
+        return PF_Err_BAD_CALLBACK_PARAM;
+    }
+
+    if (out_data->sequence_data) {
+        PF_DISPOSE_HANDLE(out_data->sequence_data);
+        out_data->sequence_data = nullptr;
+    }
+
+    out_data->sequence_data = create_sequence_handle(in_data, BACKTYPE_DEFAULT_TEXT);
+    return out_data->sequence_data ? PF_Err_NONE : PF_Err_OUT_OF_MEMORY;
+}
+
+PF_Err sequence_resetup(PF_InData *in_data, PF_OutData *out_data) {
+    if (!in_data || !out_data) {
+        return PF_Err_BAD_CALLBACK_PARAM;
+    }
+
+    if (in_data->sequence_data) {
+        out_data->sequence_data = in_data->sequence_data;
+        return PF_Err_NONE;
+    }
+
+    return sequence_setup(in_data, out_data);
+}
+
+PF_Err sequence_setdown(PF_InData *in_data, PF_OutData *out_data) {
+    if (!in_data || !out_data) {
+        return PF_Err_BAD_CALLBACK_PARAM;
+    }
+
+    if (in_data->sequence_data) {
+        PF_DISPOSE_HANDLE(in_data->sequence_data);
+    }
+    out_data->sequence_data = nullptr;
+    return PF_Err_NONE;
+}
+
 PF_Err params_setup(PF_InData *in_data, PF_OutData *out_data) {
     if (!in_data || !out_data) {
         return PF_Err_BAD_CALLBACK_PARAM;
@@ -163,21 +198,6 @@ PF_Err params_setup(PF_InData *in_data, PF_OutData *out_data) {
 
     PF_Err err = PF_Err_NONE;
     PF_ParamDef def;
-
-    PF_ArbitraryH default_text = create_text_handle(in_data, BACKTYPE_DEFAULT_TEXT);
-    if (!default_text) {
-        return PF_Err_OUT_OF_MEMORY;
-    }
-
-    AEFX_CLR_STRUCT(def);
-    PF_ADD_ARBITRARY2(backtype_strings::kTextData,
-                      1,
-                      1,
-                      PF_ParamFlag_SUPERVISE,
-                      PF_PUI_NO_ECW_UI,
-                      default_text,
-                      BACKTYPE_TEXT_DATA_DISK_ID,
-                      kTextArbitraryRefcon);
 
     AEFX_CLR_STRUCT(def);
     PF_ADD_BUTTON(backtype_strings::kText,
@@ -366,18 +386,6 @@ bool checkbox_value(PF_ParamDef *param, bool fallback) {
     return param ? param->u.bd.value != 0 : fallback;
 }
 
-std::string string_value(PF_InData *in_data, PF_ParamDef *param, const char *fallback) {
-    if (!param) {
-        return fallback ? fallback : "";
-    }
-
-    if (param->param_type == PF_Param_ARBITRARY_DATA) {
-        return text_from_handle(in_data, param->u.arb_d.value, fallback);
-    }
-
-    return fallback ? fallback : "";
-}
-
 std::vector<std::string> utf8_characters(const std::string &text) {
     std::vector<std::string> chars;
     for (std::size_t i = 0; i < text.size();) {
@@ -441,7 +449,7 @@ PF_Err render(PF_InData *in_data, PF_ParamDef *params[], PF_LayerDef *output) {
     const auto text_source = static_cast<backtype::TextSource>(
         std::clamp(popup_value(params[BACKTYPE_TEXT_SOURCE], 1), 1, 2));
     (void)text_source; // Layer text is exposed for UX, but render uses Plugin Text until AE source-text access is added.
-    const std::string text = string_value(in_data, params[BACKTYPE_TEXT_DATA], BACKTYPE_DEFAULT_TEXT);
+    const std::string text = text_from_sequence(in_data, BACKTYPE_DEFAULT_TEXT);
     const double progress = backtype::clamp_progress(slider_value(params[BACKTYPE_PROGRESS], 100.0));
     if (text.empty() || progress <= 0.0) {
         return PF_Err_NONE;
@@ -526,126 +534,6 @@ PF_Err render(PF_InData *in_data, PF_ParamDef *params[], PF_LayerDef *output) {
     return PF_Err_NONE;
 }
 
-PF_Err handle_arbitrary(PF_InData *in_data, PF_ArbParamsExtra *extra) {
-    if (!in_data || !extra) {
-        return PF_Err_BAD_CALLBACK_PARAM;
-    }
-
-    PF_Err err = PF_Err_NONE;
-    switch (extra->which_function) {
-        case PF_Arbitrary_NEW_FUNC:
-            if (extra->u.new_func_params.refconPV == kTextArbitraryRefcon) {
-                *extra->u.new_func_params.arbPH = create_text_handle(in_data, BACKTYPE_DEFAULT_TEXT);
-                err = *extra->u.new_func_params.arbPH ? PF_Err_NONE : PF_Err_OUT_OF_MEMORY;
-            }
-            break;
-
-        case PF_Arbitrary_DISPOSE_FUNC:
-            if (extra->u.dispose_func_params.arbH) {
-                PF_DISPOSE_HANDLE(extra->u.dispose_func_params.arbH);
-            }
-            break;
-
-        case PF_Arbitrary_COPY_FUNC:
-            if (extra->u.copy_func_params.src_arbH && extra->u.copy_func_params.dst_arbPH) {
-                const std::string text = text_from_handle(in_data, extra->u.copy_func_params.src_arbH, "");
-                *extra->u.copy_func_params.dst_arbPH = create_text_handle(in_data, text);
-                err = *extra->u.copy_func_params.dst_arbPH ? PF_Err_NONE : PF_Err_OUT_OF_MEMORY;
-            }
-            break;
-
-        case PF_Arbitrary_FLAT_SIZE_FUNC:
-            if (extra->u.flat_size_func_params.flat_data_sizePLu) {
-                *extra->u.flat_size_func_params.flat_data_sizePLu = sizeof(BackTypeTextData);
-            }
-            break;
-
-        case PF_Arbitrary_FLATTEN_FUNC:
-            if (extra->u.flatten_func_params.arbH &&
-                extra->u.flatten_func_params.flat_dataPV &&
-                extra->u.flatten_func_params.buf_sizeLu >= sizeof(BackTypeTextData)) {
-                auto *src = reinterpret_cast<const BackTypeTextData *>(PF_LOCK_HANDLE(extra->u.flatten_func_params.arbH));
-                if (src) {
-                    std::memcpy(extra->u.flatten_func_params.flat_dataPV, src, sizeof(BackTypeTextData));
-                    PF_UNLOCK_HANDLE(extra->u.flatten_func_params.arbH);
-                } else {
-                    err = PF_Err_OUT_OF_MEMORY;
-                }
-            }
-            break;
-
-        case PF_Arbitrary_UNFLATTEN_FUNC:
-            if (extra->u.unflatten_func_params.flat_dataPV &&
-                extra->u.unflatten_func_params.arbPH &&
-                extra->u.unflatten_func_params.buf_sizeLu >= sizeof(BackTypeTextData)) {
-                PF_ArbitraryH handle = create_text_handle(in_data, "");
-                if (!handle) {
-                    err = PF_Err_OUT_OF_MEMORY;
-                } else {
-                    auto *dst = reinterpret_cast<BackTypeTextData *>(PF_LOCK_HANDLE(handle));
-                    if (dst) {
-                        std::memcpy(dst, extra->u.unflatten_func_params.flat_dataPV, sizeof(BackTypeTextData));
-                        dst->text[kBackTypeTextMaxBytes - 1] = '\0';
-                        PF_UNLOCK_HANDLE(handle);
-                        *extra->u.unflatten_func_params.arbPH = handle;
-                    } else {
-                        PF_DISPOSE_HANDLE(handle);
-                        err = PF_Err_OUT_OF_MEMORY;
-                    }
-                }
-            }
-            break;
-
-        case PF_Arbitrary_INTERP_FUNC:
-            if (extra->u.interp_func_params.left_arbH && extra->u.interp_func_params.right_arbH) {
-                const std::string left = text_from_handle(in_data, extra->u.interp_func_params.left_arbH, "");
-                const std::string right = text_from_handle(in_data, extra->u.interp_func_params.right_arbH, "");
-                const std::string chosen = extra->u.interp_func_params.tF < 0.5 ? left : right;
-                *extra->u.interp_func_params.interpPH = create_text_handle(in_data, chosen);
-                err = *extra->u.interp_func_params.interpPH ? PF_Err_NONE : PF_Err_OUT_OF_MEMORY;
-            }
-            break;
-
-        case PF_Arbitrary_COMPARE_FUNC:
-            if (extra->u.compare_func_params.compareP) {
-                const std::string a = text_from_handle(in_data, extra->u.compare_func_params.a_arbH, "");
-                const std::string b = text_from_handle(in_data, extra->u.compare_func_params.b_arbH, "");
-                *extra->u.compare_func_params.compareP = (a == b) ? PF_ArbCompare_EQUAL : PF_ArbCompare_NOT_EQUAL;
-            }
-            break;
-
-        case PF_Arbitrary_PRINT_SIZE_FUNC:
-            if (extra->u.print_size_func_params.print_sizePLu) {
-                *extra->u.print_size_func_params.print_sizePLu = kBackTypeTextMaxBytes;
-            }
-            break;
-
-        case PF_Arbitrary_PRINT_FUNC:
-            if (extra->u.print_func_params.print_bufferPC && extra->u.print_func_params.print_sizeLu > 0) {
-                const std::string text = text_from_handle(in_data, extra->u.print_func_params.arbH, "");
-                const auto max_copy = static_cast<std::size_t>(extra->u.print_func_params.print_sizeLu - 1);
-                const auto copy_size = std::min(text.size(), max_copy);
-                std::memcpy(extra->u.print_func_params.print_bufferPC, text.data(), copy_size);
-                extra->u.print_func_params.print_bufferPC[copy_size] = '\0';
-            }
-            break;
-
-        case PF_Arbitrary_SCAN_FUNC:
-            if (extra->u.scan_func_params.arbPH && extra->u.scan_func_params.bufPC) {
-                const std::string text(extra->u.scan_func_params.bufPC,
-                                       extra->u.scan_func_params.bytes_to_scanLu);
-                *extra->u.scan_func_params.arbPH = create_text_handle(in_data, text);
-                err = *extra->u.scan_func_params.arbPH ? PF_Err_NONE : PF_Err_OUT_OF_MEMORY;
-            }
-            break;
-
-        default:
-            break;
-    }
-
-    return err;
-}
-
 PF_Err user_changed_param(PF_InData *in_data,
                           PF_OutData *out_data,
                           PF_ParamDef *params[],
@@ -658,12 +546,12 @@ PF_Err user_changed_param(PF_InData *in_data,
         return PF_Err_NONE;
     }
 
-    std::string text = string_value(in_data, params[BACKTYPE_TEXT_DATA], BACKTYPE_DEFAULT_TEXT);
+    std::string text = text_from_sequence(in_data, BACKTYPE_DEFAULT_TEXT);
     if (!backtype::edit_text_dialog(&text)) {
         return PF_Err_NONE;
     }
 
-    PF_Err err = set_text_handle(in_data, params[BACKTYPE_TEXT_DATA], text);
+    PF_Err err = set_sequence_text(in_data, out_data, text);
     if (!err) {
         out_data->out_flags |= PF_OutFlag_FORCE_RERENDER | PF_OutFlag_REFRESH_UI;
     }
@@ -711,6 +599,15 @@ extern "C" DllExport PF_Err EffectMain(PF_Cmd cmd,
         case PF_Cmd_PARAMS_SETUP:
             err = params_setup(in_data, out_data);
             break;
+        case PF_Cmd_SEQUENCE_SETUP:
+            err = sequence_setup(in_data, out_data);
+            break;
+        case PF_Cmd_SEQUENCE_RESETUP:
+            err = sequence_resetup(in_data, out_data);
+            break;
+        case PF_Cmd_SEQUENCE_SETDOWN:
+            err = sequence_setdown(in_data, out_data);
+            break;
         case PF_Cmd_RENDER:
             try {
                 err = render(in_data, params, output);
@@ -719,9 +616,6 @@ extern "C" DllExport PF_Err EffectMain(PF_Cmd cmd,
             } catch (...) {
                 err = PF_Err_INTERNAL_STRUCT_DAMAGED;
             }
-            break;
-        case PF_Cmd_ARBITRARY_CALLBACK:
-            err = handle_arbitrary(in_data, reinterpret_cast<PF_ArbParamsExtra *>(extra));
             break;
         case PF_Cmd_USER_CHANGED_PARAM:
             err = user_changed_param(in_data, out_data, params, reinterpret_cast<PF_UserChangedParamExtra *>(extra));
