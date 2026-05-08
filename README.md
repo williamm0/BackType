@@ -16,6 +16,11 @@ Normal typewriter effects in After Effects are easy enough, but this specific ed
 
 ## Install
 
+Use the plugin file for your system:
+
+- Windows: `BackType.aex`
+- macOS: `BackType.plugin`
+
 ### Windows
 
 Copy `BackType.aex` into your After Effects plug-ins folder.
@@ -68,10 +73,13 @@ Working features:
 - Size, color, position, direction, and opacity controls
 
 Still rough:
-- The current AE SDK does not have a simple native string effect parameter. For v0.1.0, Text and Cursor Character are fixed placeholders in the UI. Editable text needs an arbitrary-data/custom-UI control next.
+- Text and Cursor Character are fixed placeholders in v0.1.0. Editable text is next.
 - Unicode is handled as UTF-8 for reveal boundaries, but platform font fallback still needs testing
 - Font selection is fixed to the platform default path for now
 - Pop Amount is present in the UI but rendering support is still a TODO
 - 16-bit and 32-bit output paths are sketched in the renderer helpers, but the first AE target is 8-bit
-- Windows PiPL generation depends on the PiPL tool that comes with the Adobe SDK
 - macOS signing/notarization is not included
+
+## License
+
+No license has been chosen yet.
