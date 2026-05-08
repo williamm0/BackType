@@ -68,6 +68,12 @@ For v0.1.1, the reliable mode is still `Text Source > Plugin Text`. The plugin k
 - Unicode text is stored as UTF-8, but font fallback and non-ASCII editing still need more real AE testing.
 - `Pop Amount` is still a parameter, but the render-side pop animation is not finished yet.
 
+## Windows
+
+There is no official Windows build yet. Windows users currently need to build the plugin themselves from source.
+
+A prebuilt .aex version is planned for a future release.
+
 ## Current state
 
 This is v0.1.1, so treat it as an early build.
