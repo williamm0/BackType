@@ -49,8 +49,8 @@ Restart After Effects.
 
 1. Create a solid.
 2. Apply `Effect > jx plugins > BackType`.
-3. Click the `Text` row in Effect Controls and type your text.
-4. Use Backspace/Delete to remove characters.
+3. Click `Text > Edit Text...`.
+4. Type your text in the dialog and press OK.
 5. Keyframe `Progress` from 0 to 100.
 
 Spaces and basic punctuation are stored in the plugin text data. Empty text renders nothing and should not crash.
@@ -59,13 +59,15 @@ Spaces and basic punctuation are stored in the plugin text data. Empty text rend
 
 You can apply BackType directly to an After Effects text layer.
 
-For v0.1.1, the reliable mode is still `Text Source > Plugin Text`. The plugin keeps a `Text Source` control with `Plugin Text` and `Layer Text`, but normal effect render callbacks do not give this plugin a clean, safe source-text read path yet. `Layer Text` is present so the UI is ready for that mode later, but it currently falls back to the plugin's editable text.
+For v0.1.2-pre.1, the reliable mode is still `Text Source > Plugin Text`. The plugin keeps a `Text Source` control with `Plugin Text` and `Layer Text`, but normal effect render callbacks do not give this plugin a clean, safe source-text read path yet. `Layer Text` is present so the UI is ready for that mode later, but it currently falls back to the plugin's editable text.
 
 ## Notes
 
 - Center Locked is now the default anchor mode.
 - Descender letters such as `y`, `g`, `j`, `p`, and `q` no longer shift the line upward while typing.
+- v0.1.2 removes the custom Effect Controls text row from v0.1.1 because that path could crash AE on apply. Text editing now uses a normal AE button and a small macOS dialog.
 - Unicode text is stored as UTF-8, but font fallback and non-ASCII editing still need more real AE testing.
+- Windows text editing still needs a native dialog implementation.
 - `Pop Amount` is still a parameter, but the render-side pop animation is not finished yet.
 
 ## Windows
@@ -76,7 +78,7 @@ A prebuilt .aex version is planned for a future release.
 
 ## Current state
 
-This is v0.1.1, so treat it as an early build.
+This is v0.1.2-pre.1, so treat it as an early build.
 
 Working target:
 

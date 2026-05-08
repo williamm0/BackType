@@ -4,7 +4,7 @@ if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin" AND NOT DEFINED CMAKE_OSX_ARCHITECTU
     set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "macOS architectures")
 endif()
 
-project(BackType VERSION 0.1.1 LANGUAGES C CXX)
+project(BackType VERSION 0.1.2 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -87,12 +87,10 @@ set(BACKTYPE_COMMON_SOURCES
     src/BackType_Strings.cpp
     src/BackType_TextData.cpp
     src/BackType_TextLogic.cpp
-    "${BACKTYPE_AE_SDK_EXAMPLES_DIR}/Util/AEFX_SuiteHelper.c"
 )
 
 set(BACKTYPE_SDK_INCLUDE_DIRS
     "${BACKTYPE_AE_SDK_EXAMPLES_DIR}/Headers"
-    "${BACKTYPE_AE_SDK_EXAMPLES_DIR}/Headers/SP"
     "${BACKTYPE_AE_SDK_EXAMPLES_DIR}/Resources"
     "${BACKTYPE_AE_SDK_EXAMPLES_DIR}/Util"
 )
@@ -127,6 +125,7 @@ if(WIN32)
     add_library(BackType MODULE
         ${BACKTYPE_COMMON_SOURCES}
         src/TextRenderer_Windows.cpp
+        src/TextEditor_Windows.cpp
         "${BACKTYPE_GENERATED_DIR}/BackType.rc"
         "${BACKTYPE_PIPL_RRC}"
     )
@@ -150,6 +149,7 @@ if(WIN32)
 elseif(APPLE)
     add_library(BackType MODULE
         ${BACKTYPE_COMMON_SOURCES}
+        src/TextEditor_macOS.mm
         src/TextRenderer_macOS.mm
     )
 
@@ -164,6 +164,7 @@ elseif(APPLE)
         "-framework CoreFoundation"
         "-framework CoreGraphics"
         "-framework CoreText"
+        "-framework AppKit"
     )
     set_target_properties(BackType PROPERTIES
         PREFIX ""

@@ -11,13 +11,9 @@
     #define PF_OutFlag_PIX_INDEPENDENT 0x00000400
 #endif
 
-#ifndef PF_OutFlag_CUSTOM_UI
-    #define PF_OutFlag_CUSTOM_UI 0x00008000
-#endif
-
 #define BACKTYPE_VERSION_MAJOR 0
 #define BACKTYPE_VERSION_MINOR 1
-#define BACKTYPE_VERSION_PATCH 1
+#define BACKTYPE_VERSION_PATCH 2
 #define BACKTYPE_VERSION_BUILD 1
 
 resource 'PiPL' (16000) {
@@ -43,7 +39,7 @@ resource 'PiPL' (16000) {
         },
         AE_Effect_Info_Flags { 0 },
         AE_Effect_Global_OutFlags {
-            PF_OutFlag_PIX_INDEPENDENT | PF_OutFlag_CUSTOM_UI
+            PF_OutFlag_PIX_INDEPENDENT
         },
         AE_Effect_Global_OutFlags_2 {
             0

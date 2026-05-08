@@ -3,6 +3,7 @@
 #include "BackType_Strings.h"
 #include "BackType_TextData.h"
 #include "BackType_TextLogic.h"
+#include "TextEditor.h"
 #include "TextRenderer.h"
 
 #include "AEConfig.h"
@@ -14,8 +15,6 @@
 #include "entry.h"
 #include "AE_Effect.h"
 #include "AE_EffectCB.h"
-#include "AE_EffectUI.h"
-#include "AEFX_SuiteHelper.h"
 #include "AE_Macros.h"
 #include "AE_PluginData.h"
 #include "Param_Utils.h"
@@ -30,6 +29,7 @@
 
 enum BackTypeParam {
     BACKTYPE_INPUT = 0,
+    BACKTYPE_TEXT_DATA,
     BACKTYPE_TEXT,
     BACKTYPE_TEXT_SOURCE,
     BACKTYPE_PROGRESS,
@@ -52,7 +52,8 @@ enum BackTypeParam {
 };
 
 enum BackTypeDiskId {
-    BACKTYPE_TEXT_DISK_ID = 1,
+    BACKTYPE_TEXT_DATA_DISK_ID = 1,
+    BACKTYPE_TEXT_DISK_ID,
     BACKTYPE_TEXT_SOURCE_DISK_ID,
     BACKTYPE_PROGRESS_DISK_ID,
     BACKTYPE_FONT_SIZE_DISK_ID,
@@ -74,8 +75,6 @@ enum BackTypeDiskId {
 
 namespace {
 
-constexpr int kTextControlWidth = 260;
-constexpr int kTextControlHeight = 24;
 void *const kTextArbitraryRefcon = reinterpret_cast<void *>(static_cast<uintptr_t>(0x42545458));
 
 PF_ArbitraryH create_text_handle(PF_InData *in_data, const std::string &text) {
@@ -130,45 +129,6 @@ PF_Err set_text_handle(PF_InData *in_data, PF_ParamDef *param, const std::string
     return PF_Err_NONE;
 }
 
-std::vector<DRAWBOT_UTF16Char> utf8_to_drawbot_utf16(const std::string &text) {
-    std::vector<DRAWBOT_UTF16Char> output;
-    output.reserve(text.size() + 1);
-
-    for (std::size_t i = 0; i < text.size();) {
-        unsigned int cp = static_cast<unsigned char>(text[i]);
-        std::size_t length = 1;
-
-        if ((cp & 0xE0U) == 0xC0U && i + 1 < text.size()) {
-            cp = ((cp & 0x1FU) << 6U) | (static_cast<unsigned char>(text[i + 1]) & 0x3FU);
-            length = 2;
-        } else if ((cp & 0xF0U) == 0xE0U && i + 2 < text.size()) {
-            cp = ((cp & 0x0FU) << 12U) |
-                 ((static_cast<unsigned char>(text[i + 1]) & 0x3FU) << 6U) |
-                 (static_cast<unsigned char>(text[i + 2]) & 0x3FU);
-            length = 3;
-        } else if ((cp & 0xF8U) == 0xF0U && i + 3 < text.size()) {
-            cp = ((cp & 0x07U) << 18U) |
-                 ((static_cast<unsigned char>(text[i + 1]) & 0x3FU) << 12U) |
-                 ((static_cast<unsigned char>(text[i + 2]) & 0x3FU) << 6U) |
-                 (static_cast<unsigned char>(text[i + 3]) & 0x3FU);
-            length = 4;
-        }
-
-        if (cp <= 0xFFFFU) {
-            output.push_back(static_cast<DRAWBOT_UTF16Char>(cp));
-        } else {
-            cp -= 0x10000U;
-            output.push_back(static_cast<DRAWBOT_UTF16Char>(0xD800U + (cp >> 10U)));
-            output.push_back(static_cast<DRAWBOT_UTF16Char>(0xDC00U + (cp & 0x3FFU)));
-        }
-
-        i += length;
-    }
-
-    output.push_back(0);
-    return output;
-}
-
 PF_Err about(PF_OutData *out_data) {
     if (!out_data) {
         return PF_Err_BAD_CALLBACK_PARAM;
@@ -191,7 +151,7 @@ PF_Err global_setup(PF_OutData *out_data) {
                                       BACKTYPE_VERSION_PATCH,
                                       PF_Stage_DEVELOP,
                                       BACKTYPE_VERSION_BUILD);
-    out_data->out_flags = PF_OutFlag_PIX_INDEPENDENT | PF_OutFlag_CUSTOM_UI;
+    out_data->out_flags = PF_OutFlag_PIX_INDEPENDENT;
     out_data->out_flags2 = 0;
     return PF_Err_NONE;
 }
@@ -210,14 +170,21 @@ PF_Err params_setup(PF_InData *in_data, PF_OutData *out_data) {
     }
 
     AEFX_CLR_STRUCT(def);
-    PF_ADD_ARBITRARY2(backtype_strings::kText,
-                      kTextControlWidth,
-                      kTextControlHeight,
+    PF_ADD_ARBITRARY2(backtype_strings::kTextData,
+                      1,
+                      1,
                       PF_ParamFlag_SUPERVISE,
-                      PF_PUI_CONTROL,
+                      PF_PUI_NO_ECW_UI,
                       default_text,
-                      BACKTYPE_TEXT_DISK_ID,
+                      BACKTYPE_TEXT_DATA_DISK_ID,
                       kTextArbitraryRefcon);
+
+    AEFX_CLR_STRUCT(def);
+    PF_ADD_BUTTON(backtype_strings::kText,
+                  "Edit Text...",
+                  0,
+                  PF_ParamFlag_SUPERVISE,
+                  BACKTYPE_TEXT_DISK_ID);
 
     AEFX_CLR_STRUCT(def);
     PF_ADD_POPUP(backtype_strings::kTextSource,
@@ -383,11 +350,6 @@ PF_Err params_setup(PF_InData *in_data, PF_OutData *out_data) {
                          0,
                          BACKTYPE_OPACITY_DISK_ID);
 
-    PF_CustomUIInfo custom_ui;
-    AEFX_CLR_STRUCT(custom_ui);
-    custom_ui.events = PF_CustomEFlag_EFFECT;
-    err = (*(in_data->inter.register_ui))(in_data->effect_ref, &custom_ui);
-
     out_data->num_params = BACKTYPE_NUM_PARAMS;
     return err;
 }
@@ -479,7 +441,7 @@ PF_Err render(PF_InData *in_data, PF_ParamDef *params[], PF_LayerDef *output) {
     const auto text_source = static_cast<backtype::TextSource>(
         std::clamp(popup_value(params[BACKTYPE_TEXT_SOURCE], 1), 1, 2));
     (void)text_source; // Layer text is exposed for UX, but render uses Plugin Text until AE source-text access is added.
-    const std::string text = string_value(in_data, params[BACKTYPE_TEXT], BACKTYPE_DEFAULT_TEXT);
+    const std::string text = string_value(in_data, params[BACKTYPE_TEXT_DATA], BACKTYPE_DEFAULT_TEXT);
     const double progress = backtype::clamp_progress(slider_value(params[BACKTYPE_PROGRESS], 100.0));
     if (text.empty() || progress <= 0.0) {
         return PF_Err_NONE;
@@ -549,7 +511,7 @@ PF_Err render(PF_InData *in_data, PF_ParamDef *params[], PF_LayerDef *output) {
     const bool draw_cursor = checkbox_value(params[BACKTYPE_CURSOR_ENABLED], true) &&
                              backtype::cursor_visible(comp_seconds, slider_value(params[BACKTYPE_CURSOR_BLINK_SPEED], 2.0));
     if (draw_cursor) {
-            const std::string cursor = BACKTYPE_DEFAULT_CURSOR;
+        const std::string cursor = BACKTYPE_DEFAULT_CURSOR;
         if (!cursor.empty()) {
             backtype::render_text(target,
                                   {cursor,
@@ -562,193 +524,6 @@ PF_Err render(PF_InData *in_data, PF_ParamDef *params[], PF_LayerDef *output) {
     }
 
     return PF_Err_NONE;
-}
-
-PF_Err draw_text_param_ui(PF_InData *in_data,
-                          PF_OutData *out_data,
-                          PF_ParamDef *params[],
-                          PF_EventExtra *event_extra) {
-    if (!in_data || !out_data || !params || !event_extra ||
-        event_extra->effect_win.index != BACKTYPE_TEXT ||
-        event_extra->effect_win.area != PF_EA_CONTROL) {
-        return PF_Err_NONE;
-    }
-
-    PF_Err err = PF_Err_NONE;
-    PF_Err err2 = PF_Err_NONE;
-    DRAWBOT_Suites suites;
-    AEFX_CLR_STRUCT(suites);
-
-    DRAWBOT_DrawRef drawing_ref = nullptr;
-    DRAWBOT_SurfaceRef surface_ref = nullptr;
-    DRAWBOT_SupplierRef supplier_ref = nullptr;
-    DRAWBOT_BrushRef background_brush = nullptr;
-    DRAWBOT_PenRef border_pen = nullptr;
-    DRAWBOT_BrushRef text_brush = nullptr;
-    DRAWBOT_PathRef path_ref = nullptr;
-    DRAWBOT_FontRef font_ref = nullptr;
-
-    ERR(AEFX_AcquireDrawbotSuites(in_data, out_data, &suites));
-
-    PF_EffectCustomUISuite1 *effect_ui = nullptr;
-    ERR(AEFX_AcquireSuite(in_data,
-                          out_data,
-                          kPFEffectCustomUISuite,
-                          kPFEffectCustomUISuiteVersion1,
-                          nullptr,
-                          reinterpret_cast<void **>(&effect_ui)));
-    if (!err && effect_ui) {
-        ERR((*effect_ui->PF_GetDrawingReference)(event_extra->contextH, &drawing_ref));
-        AEFX_ReleaseSuite(in_data, out_data, kPFEffectCustomUISuite, kPFEffectCustomUISuiteVersion1, nullptr);
-    }
-
-    ERR(suites.drawbot_suiteP->GetSupplier(drawing_ref, &supplier_ref));
-    ERR(suites.drawbot_suiteP->GetSurface(drawing_ref, &surface_ref));
-    ERR(suites.supplier_suiteP->NewPath(supplier_ref, &path_ref));
-
-    DRAWBOT_RectF32 rect;
-    rect.left = static_cast<float>(event_extra->effect_win.current_frame.left) + 0.5f;
-    rect.top = static_cast<float>(event_extra->effect_win.current_frame.top) + 0.5f;
-    rect.width = static_cast<float>(event_extra->effect_win.current_frame.right -
-                                    event_extra->effect_win.current_frame.left) -
-                 1.0f;
-    rect.height = static_cast<float>(event_extra->effect_win.current_frame.bottom -
-                                     event_extra->effect_win.current_frame.top) -
-                  1.0f;
-    ERR(suites.path_suiteP->AddRect(path_ref, &rect));
-
-    DRAWBOT_ColorRGBA color;
-    color.red = 0.16f;
-    color.green = 0.16f;
-    color.blue = 0.16f;
-    color.alpha = 1.0f;
-    ERR(suites.supplier_suiteP->NewBrush(supplier_ref, &color, &background_brush));
-    ERR(suites.surface_suiteP->FillPath(surface_ref, background_brush, path_ref, kDRAWBOT_FillType_Default));
-
-    color.red = 0.34f;
-    color.green = 0.34f;
-    color.blue = 0.34f;
-    ERR(suites.supplier_suiteP->NewPen(supplier_ref, &color, 1.0f, &border_pen));
-    ERR(suites.surface_suiteP->StrokePath(surface_ref, border_pen, path_ref));
-
-    float default_font_size = 0.0f;
-    ERR(suites.supplier_suiteP->GetDefaultFontSize(supplier_ref, &default_font_size));
-    ERR(suites.supplier_suiteP->NewDefaultFont(supplier_ref, default_font_size, &font_ref));
-
-    color.red = 0.92f;
-    color.green = 0.92f;
-    color.blue = 0.92f;
-    color.alpha = 1.0f;
-    ERR(suites.supplier_suiteP->NewBrush(supplier_ref, &color, &text_brush));
-
-    const std::string text = string_value(in_data, params[BACKTYPE_TEXT], BACKTYPE_DEFAULT_TEXT);
-    const auto utf16 = utf8_to_drawbot_utf16(text.empty() ? std::string(" ") : text);
-
-    DRAWBOT_PointF32 origin;
-    origin.x = rect.left + 6.0f;
-    origin.y = rect.top + rect.height - 7.0f;
-    ERR(suites.surface_suiteP->DrawString(surface_ref,
-                                          text_brush,
-                                          font_ref,
-                                          utf16.data(),
-                                          &origin,
-                                          kDRAWBOT_TextAlignment_Default,
-                                          kDRAWBOT_TextTruncation_EndEllipsis,
-                                          rect.width - 12.0f));
-
-    if (text_brush) {
-        ERR2(suites.supplier_suiteP->ReleaseObject(reinterpret_cast<DRAWBOT_ObjectRef>(text_brush)));
-    }
-    if (font_ref) {
-        ERR2(suites.supplier_suiteP->ReleaseObject(reinterpret_cast<DRAWBOT_ObjectRef>(font_ref)));
-    }
-    if (border_pen) {
-        ERR2(suites.supplier_suiteP->ReleaseObject(reinterpret_cast<DRAWBOT_ObjectRef>(border_pen)));
-    }
-    if (background_brush) {
-        ERR2(suites.supplier_suiteP->ReleaseObject(reinterpret_cast<DRAWBOT_ObjectRef>(background_brush)));
-    }
-    if (path_ref) {
-        ERR2(suites.supplier_suiteP->ReleaseObject(reinterpret_cast<DRAWBOT_ObjectRef>(path_ref)));
-    }
-    ERR2(AEFX_ReleaseDrawbotSuites(in_data, out_data));
-
-    if (!err) {
-        event_extra->evt_out_flags = PF_EO_HANDLED_EVENT;
-    }
-    return err;
-}
-
-PF_Err handle_text_param_key(PF_InData *in_data,
-                             PF_ParamDef *params[],
-                             PF_EventExtra *event_extra) {
-    if (!in_data || !params || !event_extra ||
-        event_extra->effect_win.index != BACKTYPE_TEXT ||
-        event_extra->effect_win.area != PF_EA_CONTROL) {
-        return PF_Err_NONE;
-    }
-
-    const PF_KeyCode keycode = event_extra->u.key_down.keycode;
-    std::string text = string_value(in_data, params[BACKTYPE_TEXT], BACKTYPE_DEFAULT_TEXT);
-    bool changed = false;
-
-    if (PF_KEYCODE_IS_PRINTABLE(keycode)) {
-        const unsigned int cp = static_cast<unsigned int>(PF_KEYCODE_GET_SHORTCUT_CHARACTER(keycode));
-        if (cp >= 32U) {
-            text = backtype::append_utf8_character(text, cp);
-            changed = true;
-        }
-    } else {
-        const auto control = static_cast<PF_ControlCode>(PF_KEYCODE_GET_CONTROL_CODE(keycode));
-        if (control == PF_ControlCode_Space) {
-            text.push_back(' ');
-            changed = true;
-        } else if (control == PF_ControlCode_Backspace || control == PF_ControlCode_Delete) {
-            text = backtype::erase_last_utf8_character(text);
-            changed = true;
-        }
-    }
-
-    if (!changed) {
-        return PF_Err_NONE;
-    }
-
-    PF_Err err = set_text_handle(in_data, params[BACKTYPE_TEXT], text);
-    if (!err) {
-        event_extra->evt_out_flags = PF_EO_HANDLED_EVENT | PF_EO_UPDATE_NOW;
-    }
-    return err;
-}
-
-PF_Err handle_event(PF_InData *in_data,
-                    PF_OutData *out_data,
-                    PF_ParamDef *params[],
-                    PF_EventExtra *event_extra) {
-    if (!event_extra) {
-        return PF_Err_BAD_CALLBACK_PARAM;
-    }
-
-    switch (event_extra->e_type) {
-        case PF_Event_DRAW:
-            return draw_text_param_ui(in_data, out_data, params, event_extra);
-        case PF_Event_KEYDOWN:
-            return handle_text_param_key(in_data, params, event_extra);
-        case PF_Event_DO_CLICK:
-            if (event_extra->effect_win.index == BACKTYPE_TEXT &&
-                event_extra->effect_win.area == PF_EA_CONTROL) {
-                event_extra->evt_out_flags = PF_EO_HANDLED_EVENT;
-            }
-            return PF_Err_NONE;
-        case PF_Event_ADJUST_CURSOR:
-            if (event_extra->effect_win.index == BACKTYPE_TEXT &&
-                event_extra->effect_win.area == PF_EA_CONTROL) {
-                event_extra->u.adjust_cursor.set_cursor = PF_Cursor_HORZ_I_BEAM;
-                event_extra->evt_out_flags = PF_EO_HANDLED_EVENT;
-            }
-            return PF_Err_NONE;
-        default:
-            return PF_Err_NONE;
-    }
 }
 
 PF_Err handle_arbitrary(PF_InData *in_data, PF_ArbParamsExtra *extra) {
@@ -871,6 +646,30 @@ PF_Err handle_arbitrary(PF_InData *in_data, PF_ArbParamsExtra *extra) {
     return err;
 }
 
+PF_Err user_changed_param(PF_InData *in_data,
+                          PF_OutData *out_data,
+                          PF_ParamDef *params[],
+                          PF_UserChangedParamExtra *extra) {
+    if (!in_data || !out_data || !params || !extra) {
+        return PF_Err_BAD_CALLBACK_PARAM;
+    }
+
+    if (extra->param_index != BACKTYPE_TEXT) {
+        return PF_Err_NONE;
+    }
+
+    std::string text = string_value(in_data, params[BACKTYPE_TEXT_DATA], BACKTYPE_DEFAULT_TEXT);
+    if (!backtype::edit_text_dialog(&text)) {
+        return PF_Err_NONE;
+    }
+
+    PF_Err err = set_text_handle(in_data, params[BACKTYPE_TEXT_DATA], text);
+    if (!err) {
+        out_data->out_flags |= PF_OutFlag_FORCE_RERENDER | PF_OutFlag_REFRESH_UI;
+    }
+    return err;
+}
+
 } // namespace
 
 extern "C" DllExport PF_Err PluginDataEntryFunction2(PF_PluginDataPtr inPtr,
@@ -921,11 +720,11 @@ extern "C" DllExport PF_Err EffectMain(PF_Cmd cmd,
                 err = PF_Err_INTERNAL_STRUCT_DAMAGED;
             }
             break;
-        case PF_Cmd_EVENT:
-            err = handle_event(in_data, out_data, params, reinterpret_cast<PF_EventExtra *>(extra));
-            break;
         case PF_Cmd_ARBITRARY_CALLBACK:
             err = handle_arbitrary(in_data, reinterpret_cast<PF_ArbParamsExtra *>(extra));
+            break;
+        case PF_Cmd_USER_CHANGED_PARAM:
+            err = user_changed_param(in_data, out_data, params, reinterpret_cast<PF_UserChangedParamExtra *>(extra));
             break;
         default:
             break;
