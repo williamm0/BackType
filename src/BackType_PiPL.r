@@ -1,7 +1,23 @@
-#include "AEConfig.h"
-#include "AE_Effect.h"
 #include "AE_EffectVers.h"
-#include "PiPL.r"
+
+#ifndef AE_OS_WIN
+    #ifndef AE_OS_MAC
+        #define AE_OS_MAC 1
+    #endif
+    #include <AE_General.r>
+#endif
+
+#ifndef PF_OutFlag_USE_OUTPUT_EXTENT
+    #define PF_OutFlag_USE_OUTPUT_EXTENT 0x00000040
+#endif
+
+#ifndef PF_OutFlag_PIX_INDEPENDENT
+    #define PF_OutFlag_PIX_INDEPENDENT 0x00000400
+#endif
+
+#ifndef PF_OutFlag2_SUPPORTS_THREADED_RENDERING
+    #define PF_OutFlag2_SUPPORTS_THREADED_RENDERING 0x08000000
+#endif
 
 #define BACKTYPE_VERSION_MAJOR 0
 #define BACKTYPE_VERSION_MINOR 1
@@ -15,10 +31,10 @@ resource 'PiPL' (16000) {
         Category { "jx plugins" },
 
 #ifdef AE_OS_WIN
-        CodeWin64X86 { "EntryPointFunc" },
+        CodeWin64X86 { "EffectMain" },
 #else
-        CodeMacIntel64 { "EntryPointFunc" },
-        CodeMacARM64 { "EntryPointFunc" },
+        CodeMacIntel64 { "EffectMain" },
+        CodeMacARM64 { "EffectMain" },
 #endif
 
         AE_PiPL_Version { 2, 0 },
@@ -38,6 +54,7 @@ resource 'PiPL' (16000) {
             PF_OutFlag2_SUPPORTS_THREADED_RENDERING
         },
         AE_Effect_Match_Name { "jx.BackType" },
-        AE_Reserved_Info { 0 }
+        AE_Reserved_Info { 0 },
+        AE_Effect_Support_URL { "https://github.com/williamm0/BackType" }
     }
 };

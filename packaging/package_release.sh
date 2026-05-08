@@ -25,7 +25,7 @@ fi
 rm -rf "$STAGING_DIR"
 mkdir -p "$DIST_DIR" "$STAGING_DIR"
 
-missing=0
+created=0
 
 if [[ -n "$WINDOWS_ARTIFACT" && -f "$WINDOWS_ARTIFACT" ]]; then
   win_stage="$STAGING_DIR/windows"
@@ -34,9 +34,9 @@ if [[ -n "$WINDOWS_ARTIFACT" && -f "$WINDOWS_ARTIFACT" ]]; then
   cp "$ROOT_DIR/README.md" "$win_stage/README.md"
   [[ -f "$ROOT_DIR/LICENSE" ]] && cp "$ROOT_DIR/LICENSE" "$win_stage/LICENSE"
   (cd "$win_stage" && zip -qr "$DIST_DIR/BackType-v${VERSION}-Windows.zip" .)
+  created=1
 else
   echo "Missing Windows artifact: BackType.aex"
-  missing=1
 fi
 
 if [[ -n "$MACOS_ARTIFACT" && -d "$MACOS_ARTIFACT" ]]; then
@@ -47,16 +47,16 @@ if [[ -n "$MACOS_ARTIFACT" && -d "$MACOS_ARTIFACT" ]]; then
   [[ -f "$ROOT_DIR/LICENSE" ]] && cp "$ROOT_DIR/LICENSE" "$mac_stage/LICENSE"
   (cd "$mac_stage" && ditto -c -k --sequesterRsrc --keepParent BackType.plugin "$DIST_DIR/BackType-v${VERSION}-macOS.zip")
   (cd "$mac_stage" && zip -qur "$DIST_DIR/BackType-v${VERSION}-macOS.zip" README.md LICENSE 2>/dev/null || true)
+  created=1
 else
   echo "Missing macOS artifact: BackType.plugin"
-  missing=1
 fi
 
-if [[ "$missing" -ne 0 ]]; then
-  echo "Release zips were not completed because one or more compiled plugin artifacts are missing."
+if [[ "$created" -eq 0 ]]; then
+  echo "No release zips were created because no compiled plugin artifacts were found."
   exit 1
 fi
 
 echo "Created:"
-echo "  $DIST_DIR/BackType-v${VERSION}-Windows.zip"
-echo "  $DIST_DIR/BackType-v${VERSION}-macOS.zip"
+[[ -f "$DIST_DIR/BackType-v${VERSION}-Windows.zip" ]] && echo "  $DIST_DIR/BackType-v${VERSION}-Windows.zip"
+[[ -f "$DIST_DIR/BackType-v${VERSION}-macOS.zip" ]] && echo "  $DIST_DIR/BackType-v${VERSION}-macOS.zip"

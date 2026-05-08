@@ -14,11 +14,8 @@
 #include "AE_Effect.h"
 #include "AE_EffectCB.h"
 #include "AE_Macros.h"
+#include "AE_PluginData.h"
 #include "Param_Utils.h"
-
-#ifndef PF_ADD_CHECKBOXX
-#define PF_ADD_CHECKBOXX(NAME, LABEL, DFLT, FLAGS, ID) PF_ADD_CHECKBOX(NAME, LABEL, DFLT, ID)
-#endif
 
 #include <algorithm>
 #include <cmath>
@@ -94,7 +91,10 @@ PF_Err params_setup(PF_InData *in_data, PF_OutData *out_data) {
     PF_ParamDef def;
 
     AEFX_CLR_STRUCT(def);
-    PF_ADD_STRING(backtype_strings::kText, BACKTYPE_DEFAULT_TEXT, BACKTYPE_TEXT_DISK_ID);
+    // AE's public effect-param API in SDK 25.6 does not expose a native text
+    // field. This placeholder keeps the parameter layout stable while the
+    // editable text control is implemented as arbitrary-data/custom UI later.
+    PF_ADD_NULL("Text (v0.1 fixed to BackType)", BACKTYPE_TEXT_DISK_ID);
 
     AEFX_CLR_STRUCT(def);
     PF_ADD_FLOAT_SLIDERX(backtype_strings::kProgress,
@@ -102,10 +102,8 @@ PF_Err params_setup(PF_InData *in_data, PF_OutData *out_data) {
                          100.0,
                          0.0,
                          100.0,
-                         0.0,
                          100.0,
-                         1,
-                         0,
+                         PF_Precision_INTEGER,
                          0,
                          0,
                          BACKTYPE_PROGRESS_DISK_ID);
@@ -116,10 +114,8 @@ PF_Err params_setup(PF_InData *in_data, PF_OutData *out_data) {
                          300.0,
                          8.0,
                          300.0,
-                         0.0,
                          72.0,
-                         1,
-                         0,
+                         PF_Precision_INTEGER,
                          0,
                          0,
                          BACKTYPE_FONT_SIZE_DISK_ID);
@@ -133,10 +129,8 @@ PF_Err params_setup(PF_InData *in_data, PF_OutData *out_data) {
                          200.0,
                          0.0,
                          100.0,
-                         0.0,
                          50.0,
-                         1,
-                         0,
+                         PF_Precision_INTEGER,
                          0,
                          0,
                          BACKTYPE_POSITION_X_DISK_ID);
@@ -147,10 +141,8 @@ PF_Err params_setup(PF_InData *in_data, PF_OutData *out_data) {
                          200.0,
                          0.0,
                          100.0,
-                         0.0,
                          50.0,
-                         1,
-                         0,
+                         PF_Precision_INTEGER,
                          0,
                          0,
                          BACKTYPE_POSITION_Y_DISK_ID);
@@ -168,10 +160,8 @@ PF_Err params_setup(PF_InData *in_data, PF_OutData *out_data) {
                          300.0,
                          0.0,
                          300.0,
-                         0.0,
                          100.0,
-                         1,
-                         0,
+                         PF_Precision_INTEGER,
                          0,
                          0,
                          BACKTYPE_BACKWARD_MOTION_DISK_ID);
@@ -192,13 +182,12 @@ PF_Err params_setup(PF_InData *in_data, PF_OutData *out_data) {
 
     AEFX_CLR_STRUCT(def);
     PF_ADD_CHECKBOXX(backtype_strings::kCursorEnabled,
-                     "",
                      TRUE,
                      0,
                      BACKTYPE_CURSOR_ENABLED_DISK_ID);
 
     AEFX_CLR_STRUCT(def);
-    PF_ADD_STRING(backtype_strings::kCursorCharacter, BACKTYPE_DEFAULT_CURSOR, BACKTYPE_CURSOR_CHARACTER_DISK_ID);
+    PF_ADD_NULL("Cursor Character (v0.1 fixed to |)", BACKTYPE_CURSOR_CHARACTER_DISK_ID);
 
     AEFX_CLR_STRUCT(def);
     PF_ADD_FLOAT_SLIDERX(backtype_strings::kCursorBlinkSpeed,
@@ -206,10 +195,8 @@ PF_Err params_setup(PF_InData *in_data, PF_OutData *out_data) {
                          10.0,
                          0.0,
                          10.0,
-                         0.0,
                          2.0,
-                         1,
-                         0,
+                         PF_Precision_INTEGER,
                          0,
                          0,
                          BACKTYPE_CURSOR_BLINK_SPEED_DISK_ID);
@@ -220,10 +207,8 @@ PF_Err params_setup(PF_InData *in_data, PF_OutData *out_data) {
                          100.0,
                          -100.0,
                          100.0,
-                         0.0,
                          8.0,
-                         1,
-                         0,
+                         PF_Precision_INTEGER,
                          0,
                          0,
                          BACKTYPE_CURSOR_OFFSET_DISK_ID);
@@ -235,9 +220,7 @@ PF_Err params_setup(PF_InData *in_data, PF_OutData *out_data) {
                          0.0,
                          100.0,
                          0.0,
-                         0.0,
-                         1,
-                         0,
+                         PF_Precision_INTEGER,
                          0,
                          0,
                          BACKTYPE_POP_AMOUNT_DISK_ID);
@@ -249,9 +232,7 @@ PF_Err params_setup(PF_InData *in_data, PF_OutData *out_data) {
                          0.0,
                          50.0,
                          0.0,
-                         0.0,
-                         1,
-                         0,
+                         PF_Precision_INTEGER,
                          0,
                          0,
                          BACKTYPE_JITTER_AMOUNT_DISK_ID);
@@ -262,10 +243,8 @@ PF_Err params_setup(PF_InData *in_data, PF_OutData *out_data) {
                          100.0,
                          0.0,
                          100.0,
-                         0.0,
                          100.0,
-                         1,
-                         0,
+                         PF_Precision_INTEGER,
                          0,
                          0,
                          BACKTYPE_OPACITY_DISK_ID);
@@ -287,16 +266,8 @@ bool checkbox_value(PF_ParamDef *param, bool fallback) {
 }
 
 std::string string_value(PF_ParamDef *param, const char *fallback) {
-    if (!param) {
-        return fallback;
-    }
-
-    const char *value = reinterpret_cast<const char *>(BACKTYPE_AE_STRING_VALUE(param));
-    if (!value || value[0] == '\0') {
-        return fallback;
-    }
-
-    return value;
+    (void)param;
+    return fallback;
 }
 
 std::vector<std::string> utf8_characters(const std::string &text) {
@@ -435,12 +406,33 @@ PF_Err render(PF_InData *in_data, PF_ParamDef *params[], PF_LayerDef *output) {
 
 } // namespace
 
-extern "C" DllExport PF_Err EntryPointFunc(PF_Cmd cmd,
-                                           PF_InData *in_data,
-                                           PF_OutData *out_data,
-                                           PF_ParamDef *params[],
-                                           PF_LayerDef *output,
-                                           void *extra) {
+extern "C" DllExport PF_Err PluginDataEntryFunction2(PF_PluginDataPtr inPtr,
+                                                      PF_PluginDataCB2 inPluginDataCallBackPtr,
+                                                      SPBasicSuite *inSPBasicSuitePtr,
+                                                      const char *inHostName,
+                                                      const char *inHostVersion) {
+    (void)inSPBasicSuitePtr;
+    (void)inHostName;
+    (void)inHostVersion;
+
+    PF_Err result = PF_Err_INVALID_CALLBACK;
+    PF_REGISTER_EFFECT_EXT2(inPtr,
+                            inPluginDataCallBackPtr,
+                            BACKTYPE_NAME,
+                            BACKTYPE_MATCH_NAME,
+                            BACKTYPE_CATEGORY,
+                            AE_RESERVED_INFO,
+                            "EffectMain",
+                            "https://github.com/williamm0/BackType");
+    return result;
+}
+
+extern "C" DllExport PF_Err EffectMain(PF_Cmd cmd,
+                                       PF_InData *in_data,
+                                       PF_OutData *out_data,
+                                       PF_ParamDef *params[],
+                                       PF_LayerDef *output,
+                                       void *extra) {
     PF_Err err = PF_Err_NONE;
 
     switch (cmd) {

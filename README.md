@@ -68,6 +68,7 @@ Working features:
 - Size, color, position, direction, and opacity controls
 
 Still rough:
+- The current AE SDK does not have a simple native string effect parameter. For v0.1.0, Text and Cursor Character are fixed placeholders in the UI. Editable text needs an arbitrary-data/custom-UI control next.
 - Unicode is handled as UTF-8 for reveal boundaries, but platform font fallback still needs testing
 - Font selection is fixed to the platform default path for now
 - Pop Amount is present in the UI but rendering support is still a TODO
@@ -97,14 +98,14 @@ cmake --build build/tests
 
 ### macOS plugin
 
-Install Xcode and CMake, then point `AE_SDK_ROOT` at your local After Effects SDK:
+Install Command Line Tools, CMake, and Ninja. Point `AE_SDK_ROOT` at either the extracted SDK `Examples` folder or the folder that contains Adobe's extracted SDK package:
 
 ```bash
-cmake -S . -B build/macos -DAE_SDK_ROOT="/path/to/AfterEffectsSDK"
+cmake -S . -B build/macos -G Ninja -DAE_SDK_ROOT="/Users/william/SDKs/AfterEffectsSDK"
 cmake --build build/macos --config Release
 ```
 
-The target output is `BackType.plugin`.
+The target output is `build/macos/BackType.plugin`. On macOS the default CMake build is universal (`arm64;x86_64`) so it matches the PiPL entries.
 
 The build runs `Rez` on `src/BackType_PiPL.r` and writes the PiPL resource into the plugin bundle. If your SDK keeps `PiPL.r` somewhere unusual, update `AE_SDK_ROOT` or the include paths in `CMakeLists.txt`.
 

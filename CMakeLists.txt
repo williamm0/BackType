@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.21)
 
+if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin" AND NOT DEFINED CMAKE_OSX_ARCHITECTURES)
+    set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "macOS architectures")
+endif()
+
 project(BackType VERSION 0.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -26,6 +30,33 @@ if(NOT AE_SDK_ROOT)
     message(FATAL_ERROR "Set AE_SDK_ROOT to your local Adobe After Effects SDK path.")
 endif()
 
+set(BACKTYPE_AE_SDK_CANDIDATES
+    "${AE_SDK_ROOT}"
+    "${AE_SDK_ROOT}/Examples"
+)
+
+file(GLOB BACKTYPE_AE_SDK_EXTRACTED_CANDIDATES
+    LIST_DIRECTORIES true
+    "${AE_SDK_ROOT}/AfterEffectsSDK_*_mac/ae*.AfterEffectsSDK/Examples"
+    "${AE_SDK_ROOT}/AfterEffectsSDK_*_win/ae*.AfterEffectsSDK/Examples"
+    "${AE_SDK_ROOT}/ae*.AfterEffectsSDK/Examples"
+)
+list(APPEND BACKTYPE_AE_SDK_CANDIDATES ${BACKTYPE_AE_SDK_EXTRACTED_CANDIDATES})
+
+set(BACKTYPE_AE_SDK_EXAMPLES_DIR "")
+foreach(candidate IN LISTS BACKTYPE_AE_SDK_CANDIDATES)
+    if(EXISTS "${candidate}/Headers/AE_Effect.h" AND EXISTS "${candidate}/Util/Param_Utils.h")
+        set(BACKTYPE_AE_SDK_EXAMPLES_DIR "${candidate}")
+        break()
+    endif()
+endforeach()
+
+if(NOT BACKTYPE_AE_SDK_EXAMPLES_DIR)
+    message(FATAL_ERROR "Could not find AE SDK Examples directory under AE_SDK_ROOT='${AE_SDK_ROOT}'. Expected Headers/AE_Effect.h and Util/Param_Utils.h.")
+endif()
+
+message(STATUS "Using AE SDK examples directory: ${BACKTYPE_AE_SDK_EXAMPLES_DIR}")
+
 set(BACKTYPE_COMMON_SOURCES
     src/BackType.cpp
     src/BackType_Strings.cpp
@@ -33,9 +64,9 @@ set(BACKTYPE_COMMON_SOURCES
 )
 
 set(BACKTYPE_SDK_INCLUDE_DIRS
-    "${AE_SDK_ROOT}/Headers"
-    "${AE_SDK_ROOT}/Resources"
-    "${AE_SDK_ROOT}/Util"
+    "${BACKTYPE_AE_SDK_EXAMPLES_DIR}/Headers"
+    "${BACKTYPE_AE_SDK_EXAMPLES_DIR}/Resources"
+    "${BACKTYPE_AE_SDK_EXAMPLES_DIR}/Util"
 )
 
 if(WIN32)
@@ -114,14 +145,15 @@ elseif(APPLE)
         BUNDLE TRUE
         BUNDLE_EXTENSION "plugin"
         MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/packaging/Info.plist.in"
+        BUILD_WITH_INSTALL_RPATH TRUE
     )
 
     add_custom_command(TARGET BackType POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_BUNDLE_DIR:BackType>/Contents/Resources"
         COMMAND /usr/bin/Rez
             -useDF
-            -I "${AE_SDK_ROOT}/Headers"
-            -I "${AE_SDK_ROOT}/Resources"
+            -I "${BACKTYPE_AE_SDK_EXAMPLES_DIR}/Headers"
+            -I "${BACKTYPE_AE_SDK_EXAMPLES_DIR}/Resources"
             -I "${CMAKE_CURRENT_SOURCE_DIR}/src"
             "${CMAKE_CURRENT_SOURCE_DIR}/src/BackType_PiPL.r"
             -o "$<TARGET_BUNDLE_DIR:BackType>/Contents/Resources/BackType.rsrc"
