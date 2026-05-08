@@ -14,7 +14,9 @@ find_artifact() {
   while IFS= read -r path; do
     printf '%s\n' "$path"
     return 0
-  done < <(find "$ROOT_DIR/build" -name "$pattern" -print 2>/dev/null)
+  done < <(find "$ROOT_DIR/build" \
+    \( -path "$STAGING_DIR" -o -path "$STAGING_DIR/*" \) -prune -o \
+    -name "$pattern" -print 2>/dev/null)
   return 0
 }
 
