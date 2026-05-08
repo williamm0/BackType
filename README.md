@@ -17,7 +17,7 @@ It shows up under:
 - Lets you control progress, size, color, position, direction, anchor mode, and opacity
 - Uses Center Locked as the default anchor mode
 
-## Install
+## [Install](https://github.com/williamm0/BackType/releases)
 
 ### macOS
 
