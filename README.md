@@ -19,6 +19,8 @@ It shows up under:
 
 ## [Install](https://github.com/williamm0/BackType/releases)
 
+The current pre-release is macOS only.
+
 ### macOS
 
 Copy `BackType.plugin` into your After Effects plug-ins folder.
@@ -34,16 +36,6 @@ This build is not signed or notarized. If macOS blocks it because of quarantine,
 ```bash
 xattr -dr com.apple.quarantine "/Library/Application Support/Adobe/Common/Plug-ins/7.0/MediaCore/BackType.plugin"
 ```
-
-### Windows
-
-Copy `BackType.aex` into your After Effects plug-ins folder.
-
-Common path:
-
-`C:\Program Files\Adobe\Common\Plug-ins\7.0\MediaCore`
-
-Restart After Effects.
 
 ## How to use on a solid
 
@@ -67,28 +59,21 @@ For v0.1.2-pre.1, the reliable mode is still `Text Source > Plugin Text`. The pl
 - Descender letters such as `y`, `g`, `j`, `p`, and `q` no longer shift the line upward while typing.
 - v0.1.2 removes the custom Effect Controls text row from v0.1.1 because that path could crash AE on apply. Text editing now uses a normal AE button and a small macOS dialog.
 - Unicode text is stored as UTF-8, but font fallback and non-ASCII editing still need more real AE testing.
-- Windows text editing still needs a native dialog implementation.
 - `Pop Amount` is still a parameter, but the render-side pop animation is not finished yet.
 
 ## Windows
 
-There is no official Windows build yet. Windows users currently need to build the plugin themselves from source.
-
-A prebuilt .aex version is planned for a future release.
+There is no Windows release yet. No `.aex` file is included in the current pre-release.
 
 ## Current state
 
 This is v0.1.2-pre.1, so treat it as an early build.
 
-Working target:
+Released target:
 
 - macOS `.plugin`
 
-Prepared target:
-
-- Windows `.aex`
-
-The Windows CMake setup is in the repo, but the Windows binary has to be built on Windows with the After Effects SDK and PiPL tool available. Do not use a Windows zip unless it actually contains `BackType.aex`.
+Windows is not released yet.
 
 ## License
 
