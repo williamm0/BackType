@@ -48,20 +48,23 @@ int main() {
     const LayoutInput newest_left{AnchorMode::NewestCharacterLocked, Direction::MoveLeft, 200.0, 100.0, 100.0};
     const DrawPosition newest_left_pos = compute_draw_position(newest_left, bounds, bounds);
     expect_near(newest_left_pos.x, 80.0, 0.001, "newest locked move-left shifts by visible width");
-    expect_near(newest_left_pos.y, 100.0, 0.001, "move-left keeps y fixed");
+    expect_near(newest_left_pos.y, 80.0, 0.001, "move-left keeps visual center on the Y anchor");
 
     const LayoutInput center_locked{AnchorMode::CenterLocked, Direction::MoveLeft, 200.0, 100.0, 100.0};
     const DrawPosition center_pos = compute_draw_position(center_locked, bounds, bounds);
     expect_near(center_pos.x, 140.0, 0.001, "center locked centers visible text");
+    expect_near(center_pos.y, 80.0, 0.001, "center locked keeps the visual center on the Y anchor");
 
     const LayoutInput first_right{AnchorMode::FirstCharacterLocked, Direction::MoveRight, 200.0, 100.0, 300.0};
     const DrawPosition first_right_pos = compute_draw_position(first_right, bounds, bounds);
     expect_near(first_right_pos.x, 200.0, 0.001, "first character locked ignores backward amount");
+    expect_near(first_right_pos.y, 80.0, 0.001, "first character locked still centers vertically");
 
     const TextBounds full_bounds{300.0, 40.0};
     const LayoutInput last_left{AnchorMode::LastCharacterLocked, Direction::MoveLeft, 200.0, 100.0, 100.0};
     const DrawPosition last_left_pos = compute_draw_position(last_left, bounds, full_bounds);
     expect_near(last_left_pos.x, -100.0, 0.001, "last character locked uses full text width");
+    expect_near(last_left_pos.y, 80.0, 0.001, "last character locked still centers vertically");
 
     expect_true(cursor_visible(0.25, 2.0), "cursor visible in first half of blink cycle");
     expect_true(!cursor_visible(0.75, 2.0), "cursor hidden in second half of blink cycle");

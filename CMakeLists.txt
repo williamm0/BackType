@@ -10,6 +10,10 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+if(APPLE)
+    enable_language(OBJCXX)
+endif()
+
 option(BACKTYPE_BUILD_AE_PLUGIN "Build the After Effects plugin target" ON)
 option(BACKTYPE_BUILD_TESTS "Build platform-neutral tests" ON)
 
@@ -19,6 +23,21 @@ if(BACKTYPE_BUILD_TESTS)
         src/BackType_TextLogic.cpp
     )
     target_include_directories(backtype_text_logic_tests PRIVATE src)
+
+    if(APPLE)
+        add_executable(backtype_render_smoke
+            tests/BackType_RenderSmoke.mm
+            src/BackType_TextLogic.cpp
+            src/TextRenderer_macOS.mm
+        )
+        target_include_directories(backtype_render_smoke PRIVATE src)
+        target_compile_definitions(backtype_render_smoke PRIVATE MAC_ENV=1)
+        target_link_libraries(backtype_render_smoke PRIVATE
+            "-framework CoreFoundation"
+            "-framework CoreGraphics"
+            "-framework CoreText"
+        )
+    endif()
 endif()
 
 if(NOT BACKTYPE_BUILD_AE_PLUGIN)
@@ -120,8 +139,6 @@ if(WIN32)
     )
 
 elseif(APPLE)
-    enable_language(OBJCXX)
-
     add_library(BackType MODULE
         ${BACKTYPE_COMMON_SOURCES}
         src/TextRenderer_macOS.mm

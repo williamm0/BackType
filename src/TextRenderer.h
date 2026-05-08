@@ -33,6 +33,8 @@ struct TextMetrics {
     double height = 0.0;
     double ascent = 0.0;
     double descent = 0.0;
+    double left = 0.0;
+    double right = 0.0;
 };
 
 struct TextRenderRequest {

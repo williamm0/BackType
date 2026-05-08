@@ -11,7 +11,11 @@ MACOS_ARTIFACT="${MACOS_ARTIFACT:-}"
 
 find_artifact() {
   local pattern="$1"
-  find "$ROOT_DIR/build" -name "$pattern" -print 2>/dev/null | head -n 1 || true
+  while IFS= read -r path; do
+    printf '%s\n' "$path"
+    return 0
+  done < <(find "$ROOT_DIR/build" -name "$pattern" -print 2>/dev/null)
+  return 0
 }
 
 if [[ -z "$WINDOWS_ARTIFACT" ]]; then
@@ -45,8 +49,8 @@ if [[ -n "$MACOS_ARTIFACT" && -d "$MACOS_ARTIFACT" ]]; then
   ditto "$MACOS_ARTIFACT" "$mac_stage/BackType.plugin"
   cp "$ROOT_DIR/README.md" "$mac_stage/README.md"
   [[ -f "$ROOT_DIR/LICENSE" ]] && cp "$ROOT_DIR/LICENSE" "$mac_stage/LICENSE"
-  (cd "$mac_stage" && ditto -c -k --sequesterRsrc --keepParent BackType.plugin "$DIST_DIR/BackType-v${VERSION}-macOS.zip")
-  (cd "$mac_stage" && zip -qur "$DIST_DIR/BackType-v${VERSION}-macOS.zip" README.md LICENSE 2>/dev/null || true)
+  rm -f "$DIST_DIR/BackType-v${VERSION}-macOS.zip"
+  (cd "$mac_stage" && zip -qry "$DIST_DIR/BackType-v${VERSION}-macOS.zip" BackType.plugin README.md LICENSE)
   created=1
 else
   echo "Missing macOS artifact: BackType.plugin"

@@ -110,12 +110,37 @@ TextMetrics measure_text(const std::string &text, double font_size) {
     CGFloat ascent = 0.0;
     CGFloat descent = 0.0;
     CGFloat leading = 0.0;
-    const double width = CTLineGetTypographicBounds(line, &ascent, &descent, &leading);
+    const double typographic_width = CTLineGetTypographicBounds(line, &ascent, &descent, &leading);
 
     TextMetrics metrics;
-    metrics.width = std::max(0.0, width);
+    metrics.left = 0.0;
+    metrics.right = std::max(0.0, typographic_width);
     metrics.ascent = std::max(0.0, static_cast<double>(ascent));
     metrics.descent = std::max(0.0, static_cast<double>(descent));
+
+    CGColorSpaceRef color_space = CGColorSpaceCreateDeviceRGB();
+    if (color_space) {
+        std::uint8_t scratch_pixel[4] = {};
+        CGContextRef context = CGBitmapContextCreate(scratch_pixel,
+                                                     1,
+                                                     1,
+                                                     8,
+                                                     4,
+                                                     color_space,
+                                                     kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big);
+        CGColorSpaceRelease(color_space);
+        if (context) {
+            const CGRect image_bounds = CTLineGetImageBounds(line, context);
+            CGContextRelease(context);
+
+            metrics.left = std::min(metrics.left, static_cast<double>(image_bounds.origin.x));
+            metrics.right = std::max(metrics.right, static_cast<double>(CGRectGetMaxX(image_bounds)));
+            metrics.ascent = std::max(metrics.ascent, static_cast<double>(CGRectGetMaxY(image_bounds)));
+            metrics.descent = std::max(metrics.descent, std::max(0.0, -static_cast<double>(CGRectGetMinY(image_bounds))));
+        }
+    }
+
+    metrics.width = std::max(1.0, metrics.right - metrics.left);
     metrics.height = std::max(1.0, metrics.ascent + metrics.descent + static_cast<double>(leading));
     return metrics;
 }
@@ -127,8 +152,9 @@ bool render_text(const PixelBuffer &target, const TextRenderRequest &request) {
     }
 
     const TextMetrics metrics = measure_text(request.text, request.font_size);
-    const int scratch_width = std::max(1, static_cast<int>(std::ceil(metrics.width + 4.0)));
-    const int scratch_height = std::max(1, static_cast<int>(std::ceil(metrics.height + 4.0)));
+    constexpr double kPadding = 4.0;
+    const int scratch_width = std::max(1, static_cast<int>(std::ceil(metrics.width + kPadding * 2.0)));
+    const int scratch_height = std::max(1, static_cast<int>(std::ceil(metrics.height + kPadding * 2.0)));
     const int scratch_rowbytes = scratch_width * 4;
     std::vector<std::uint8_t> scratch(static_cast<std::size_t>(scratch_rowbytes * scratch_height), 0);
 
@@ -150,8 +176,6 @@ bool render_text(const PixelBuffer &target, const TextRenderRequest &request) {
 
     CGContextSetAllowsAntialiasing(context, true);
     CGContextSetShouldAntialias(context, true);
-    CGContextTranslateCTM(context, 0.0, static_cast<CGFloat>(scratch_height));
-    CGContextScaleCTM(context, 1.0, -1.0);
 
     CTLineRef line = make_line(request.text, request.font_size, &request.color, request.opacity);
     if (!line) {
@@ -159,14 +183,18 @@ bool render_text(const PixelBuffer &target, const TextRenderRequest &request) {
         return false;
     }
 
-    CGContextSetTextPosition(context, 2.0, static_cast<CGFloat>(metrics.ascent + 2.0));
+    CGContextSetTextPosition(context, 0.0, 0.0);
+    const CGRect image_bounds = CTLineGetImageBounds(line, context);
+    CGContextSetTextPosition(context,
+                             static_cast<CGFloat>(kPadding - image_bounds.origin.x),
+                             static_cast<CGFloat>(kPadding - image_bounds.origin.y));
     CTLineDraw(line, context);
 
     CFRelease(line);
     CGContextRelease(context);
 
-    const int start_x = static_cast<int>(std::floor(request.x - 2.0));
-    const int start_y = static_cast<int>(std::floor(request.y - 2.0));
+    const int start_x = static_cast<int>(std::floor(request.x - kPadding));
+    const int start_y = static_cast<int>(std::floor(request.y - kPadding));
 
     for (int y = 0; y < scratch_height; ++y) {
         const auto *src = scratch.data() + y * scratch_rowbytes;

@@ -49,6 +49,10 @@ xattr -dr com.apple.quarantine "/Library/Application Support/Adobe/Common/Plug-i
 
 That only removes the local quarantine flag. It is not code signing.
 
+Bugfix note:
+
+- The current macOS build fixes the outflags mismatch warning and recent text placement/cropping issues in After Effects Beta.
+
 ## How to use
 
 1. Create a solid.
