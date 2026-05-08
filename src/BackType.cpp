@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <new>
 #include <string>
 #include <vector>
 
@@ -68,6 +69,10 @@ enum BackTypeDiskId {
 namespace {
 
 PF_Err about(PF_OutData *out_data) {
+    if (!out_data) {
+        return PF_Err_BAD_CALLBACK_PARAM;
+    }
+
     std::strncpy(out_data->return_msg,
                  backtype_strings::kAbout,
                  sizeof(out_data->return_msg) - 1);
@@ -76,25 +81,33 @@ PF_Err about(PF_OutData *out_data) {
 }
 
 PF_Err global_setup(PF_OutData *out_data) {
+    if (!out_data) {
+        return PF_Err_BAD_CALLBACK_PARAM;
+    }
+
     out_data->my_version = PF_VERSION(BACKTYPE_VERSION_MAJOR,
                                       BACKTYPE_VERSION_MINOR,
                                       BACKTYPE_VERSION_PATCH,
                                       PF_Stage_DEVELOP,
                                       BACKTYPE_VERSION_BUILD);
-    out_data->out_flags = PF_OutFlag_PIX_INDEPENDENT | PF_OutFlag_USE_OUTPUT_EXTENT;
-    out_data->out_flags2 = PF_OutFlag2_SUPPORTS_THREADED_RENDERING;
+    out_data->out_flags = PF_OutFlag_PIX_INDEPENDENT;
+    out_data->out_flags2 = 0;
     return PF_Err_NONE;
 }
 
 PF_Err params_setup(PF_InData *in_data, PF_OutData *out_data) {
+    if (!in_data || !out_data) {
+        return PF_Err_BAD_CALLBACK_PARAM;
+    }
+
     PF_Err err = PF_Err_NONE;
     PF_ParamDef def;
 
     AEFX_CLR_STRUCT(def);
     // AE's public effect-param API in SDK 25.6 does not expose a native text
-    // field. This placeholder keeps the parameter layout stable while the
-    // editable text control is implemented as arbitrary-data/custom UI later.
-    PF_ADD_NULL("Text (v0.1 fixed to BackType)", BACKTYPE_TEXT_DISK_ID);
+    // field. Keep this as a normal popup so applying the effect never registers
+    // unsupported no-data controls in the standard Effect Controls panel.
+    PF_ADD_POPUP(backtype_strings::kText, 1, 1, BACKTYPE_DEFAULT_TEXT, BACKTYPE_TEXT_DISK_ID);
 
     AEFX_CLR_STRUCT(def);
     PF_ADD_FLOAT_SLIDERX(backtype_strings::kProgress,
@@ -187,7 +200,11 @@ PF_Err params_setup(PF_InData *in_data, PF_OutData *out_data) {
                      BACKTYPE_CURSOR_ENABLED_DISK_ID);
 
     AEFX_CLR_STRUCT(def);
-    PF_ADD_NULL("Cursor Character (v0.1 fixed to |)", BACKTYPE_CURSOR_CHARACTER_DISK_ID);
+    PF_ADD_POPUP(backtype_strings::kCursorCharacter,
+                 1,
+                 1,
+                 "Vertical Bar",
+                 BACKTYPE_CURSOR_CHARACTER_DISK_ID);
 
     AEFX_CLR_STRUCT(def);
     PF_ADD_FLOAT_SLIDERX(backtype_strings::kCursorBlinkSpeed,
@@ -318,6 +335,10 @@ void render_visible_text(const backtype::PixelBuffer &target,
 }
 
 PF_Err render(PF_InData *in_data, PF_ParamDef *params[], PF_LayerDef *output) {
+    if (!in_data || !params || !output || !output->data) {
+        return PF_Err_NONE;
+    }
+
     backtype::PixelBuffer target;
     target.data = output->data;
     target.width = output->width;
@@ -349,7 +370,14 @@ PF_Err render(PF_InData *in_data, PF_ParamDef *params[], PF_LayerDef *output) {
     const double pop_amount = std::clamp(slider_value(params[BACKTYPE_POP_AMOUNT], 0.0), 0.0, 100.0);
     (void)pop_amount; // TODO(v0.2): scale the newest character around its center as it appears.
 
-    const PF_Pixel color_param = params[BACKTYPE_TEXT_COLOR]->u.cd.value;
+    PF_Pixel color_param;
+    color_param.red = 255;
+    color_param.green = 255;
+    color_param.blue = 255;
+    color_param.alpha = 255;
+    if (params[BACKTYPE_TEXT_COLOR]) {
+        color_param = params[BACKTYPE_TEXT_COLOR]->u.cd.value;
+    }
     backtype::Color color;
     color.r = static_cast<double>(color_param.red) / 255.0;
     color.g = static_cast<double>(color_param.green) / 255.0;
@@ -446,7 +474,13 @@ extern "C" DllExport PF_Err EffectMain(PF_Cmd cmd,
             err = params_setup(in_data, out_data);
             break;
         case PF_Cmd_RENDER:
-            err = render(in_data, params, output);
+            try {
+                err = render(in_data, params, output);
+            } catch (const std::bad_alloc &) {
+                err = PF_Err_OUT_OF_MEMORY;
+            } catch (...) {
+                err = PF_Err_INTERNAL_STRUCT_DAMAGED;
+            }
             break;
         default:
             break;

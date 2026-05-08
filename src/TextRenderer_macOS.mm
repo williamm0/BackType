@@ -59,8 +59,14 @@ CTLineRef make_line(const std::string &text, double font_size, const Color *colo
             static_cast<CGFloat>(clamp_unit(color->a * opacity))
         };
         CGColorSpaceRef color_space = CGColorSpaceCreateDeviceRGB();
+        if (!color_space) {
+            return nullptr;
+        }
         cg_color = CGColorCreate(color_space, components);
         CGColorSpaceRelease(color_space);
+        if (!cg_color) {
+            return nullptr;
+        }
         values[1] = cg_color;
     }
 
@@ -115,7 +121,8 @@ TextMetrics measure_text(const std::string &text, double font_size) {
 }
 
 bool render_text(const PixelBuffer &target, const TextRenderRequest &request) {
-    if (!target.data || target.width <= 0 || target.height <= 0 || request.text.empty()) {
+    if (!target.data || target.width <= 0 || target.height <= 0 ||
+        target.rowbytes <= 0 || request.text.empty()) {
         return false;
     }
 
@@ -126,6 +133,9 @@ bool render_text(const PixelBuffer &target, const TextRenderRequest &request) {
     std::vector<std::uint8_t> scratch(static_cast<std::size_t>(scratch_rowbytes * scratch_height), 0);
 
     CGColorSpaceRef color_space = CGColorSpaceCreateDeviceRGB();
+    if (!color_space) {
+        return false;
+    }
     CGContextRef context = CGBitmapContextCreate(scratch.data(),
                                                  scratch_width,
                                                  scratch_height,

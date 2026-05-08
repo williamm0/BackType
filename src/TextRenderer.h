@@ -104,7 +104,8 @@ inline void composite_rgba8_pixel(const PixelBuffer &target,
                                   std::uint8_t premul_g,
                                   std::uint8_t premul_b,
                                   std::uint8_t alpha) {
-    if (!target.data || x < 0 || y < 0 || x >= target.width || y >= target.height || alpha == 0) {
+    if (!target.data || target.rowbytes <= 0 || x < 0 || y < 0 ||
+        x >= target.width || y >= target.height || alpha == 0) {
         return;
     }
 
@@ -116,6 +117,9 @@ inline void composite_rgba8_pixel(const PixelBuffer &target,
     auto *row = static_cast<std::uint8_t *>(target.data) + y * target.rowbytes;
 
     if (target.format == PixelFormat::Argb8) {
+        if ((x + 1) * 4 > target.rowbytes) {
+            return;
+        }
         auto *pixel = row + x * 4;
         double dst_a = static_cast<double>(pixel[0]) / 255.0;
         double dst_r = static_cast<double>(pixel[1]) / 255.0;
@@ -127,6 +131,9 @@ inline void composite_rgba8_pixel(const PixelBuffer &target,
         pixel[2] = unit_to_u8(dst_g);
         pixel[3] = unit_to_u8(dst_b);
     } else if (target.format == PixelFormat::Argb16) {
+        if ((x + 1) * 8 > target.rowbytes) {
+            return;
+        }
         auto *pixel = reinterpret_cast<std::uint16_t *>(row + x * 8);
         double dst_a = static_cast<double>(pixel[0]) / 65535.0;
         double dst_r = static_cast<double>(pixel[1]) / 65535.0;
@@ -138,6 +145,9 @@ inline void composite_rgba8_pixel(const PixelBuffer &target,
         pixel[2] = unit_to_u16(dst_g);
         pixel[3] = unit_to_u16(dst_b);
     } else {
+        if ((x + 1) * 16 > target.rowbytes) {
+            return;
+        }
         auto *pixel = reinterpret_cast<float *>(row + x * 16);
         double dst_a = pixel[0];
         double dst_r = pixel[1];

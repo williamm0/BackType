@@ -11,7 +11,7 @@ MACOS_ARTIFACT="${MACOS_ARTIFACT:-}"
 
 find_artifact() {
   local pattern="$1"
-  find "$ROOT_DIR/build" -name "$pattern" -print -quit 2>/dev/null || true
+  find "$ROOT_DIR/build" -name "$pattern" -print 2>/dev/null | head -n 1 || true
 }
 
 if [[ -z "$WINDOWS_ARTIFACT" ]]; then
