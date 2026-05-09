@@ -15,7 +15,7 @@ extern const char *kCursorStyle;
 extern const char *kCursorBlinkSpeed;
 extern const char *kCursorOffset;
 extern const char *kCharacterFade;
-extern const char *kPushEasing;
+extern const char *kRenderPadding;
 extern const char *kOpacity;
 
 } // namespace backtype_strings

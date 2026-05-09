@@ -95,7 +95,9 @@ if(WIN32)
         add_custom_command(
             OUTPUT "${BACKTYPE_PIPL_RRC}"
             COMMAND "${AE_PIPL_TOOL}" "${CMAKE_CURRENT_SOURCE_DIR}/src/BackType_PiPL.r" "${BACKTYPE_PIPL_RRC}"
-            DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/BackType_PiPL.r"
+            DEPENDS
+                "${CMAKE_CURRENT_SOURCE_DIR}/src/BackType_PiPL.r"
+                "${CMAKE_CURRENT_SOURCE_DIR}/src/BackType.h"
             COMMENT "Generating Windows PiPL resource"
             VERBATIM
         )

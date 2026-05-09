@@ -43,17 +43,27 @@ RasterRevealState compute_raster_reveal(const std::string &text,
                                         RevealMode mode,
                                         double character_fade_percent);
 
-double push_easing_multiplier(double progress_unit, PushEasing easing);
-
 RasterBounds find_alpha_bounds(const PixelBuffer &source);
 Color average_alpha_color(const PixelBuffer &source, const RasterBounds &bounds);
+
+TextBounds visible_raster_bounds(const RasterBounds &source_bounds,
+                                 const RasterRevealState &reveal,
+                                 Direction direction);
 
 void copy_revealed_raster(const PixelBuffer &source,
                           const PixelBuffer &target,
                           const RasterBounds &source_bounds,
                           DrawPosition target_position,
                           const RasterRevealState &reveal,
+                          Direction direction,
+                          double render_padding,
                           double opacity);
+
+DrawPosition cursor_position_for_reveal(DrawPosition target_position,
+                                        const RasterBounds &source_bounds,
+                                        const RasterRevealState &reveal,
+                                        Direction direction,
+                                        double cursor_offset);
 
 void draw_cursor(const PixelBuffer &target, const CursorDrawRequest &request);
 

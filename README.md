@@ -16,6 +16,7 @@ It shows up under:
 - Moves the text backward while typing
 - Supports line, block, and underscore cursor styles
 - Uses Center Locked as the default anchor mode
+- Has a Render Padding control for letters or cursors that get clipped
 
 ## Install
 
@@ -52,16 +53,18 @@ BackType no longer has its own text field. Edit the text layer's Source Text ins
 - `Progress`: reveals the text from 0 to 100.
 - `Anchor Mode`: Center Locked is the default.
 - `Backward Motion`: controls how hard the text pushes backward.
-- `Direction`: moves the line left, right, up, or down while revealing.
+- `Direction`: changes the reveal edge and backward push direction.
 - `Character Reveal Mode`: character or word reveal.
 - `Cursor Style`: line, block, or underscore.
 - `Character Fade-In`: fades the newest revealed character without changing layout.
-- `Push Easing`: changes how the backward push ramps in.
+- `Render Padding`: expands the render-safe area if letters or the cursor get clipped at the edge.
 - `Opacity`: fades the rendered result.
 
 ## Notes
 
 - Descender letters like `y`, `g`, `j`, `p`, and `q` should no longer move the whole line up or down while typing.
+- Direction now affects the actual reveal edge and push offset, not just the control value.
+- Increase `Render Padding` if a font, cursor style, or pushed motion clips the edge of a letter.
 - Cursor blinking does not affect layout.
 - Empty text renders nothing.
 - This version reads Source Text through the AE SDK, but it preserves styling by using the text layer's rendered pixels. Character reveal uses cached approximate advance widths, so unusual fonts, ligatures, RTL text, or multi-line layouts may need more testing in real AE projects.
@@ -73,7 +76,7 @@ Windows is not released yet. When a real `BackType.aex` build exists, it should 
 
 ## Current state
 
-This is v0.1.3-pre.1. Treat it as a macOS pre-release that still needs real AE runtime verification.
+This is v0.1.3-pre.2. Treat it as a macOS pre-release that still needs real AE runtime verification.
 
 ## License
 

@@ -120,7 +120,9 @@ std::string visible_text(const std::string &text, double progress, RevealMode mo
 DrawPosition compute_draw_position(const LayoutInput &input,
                                    const TextBounds &visible_bounds,
                                    const TextBounds &full_bounds) {
-    DrawPosition position{input.position_x, input.position_y - visible_bounds.height * 0.5};
+    const bool vertical_direction = input.direction == Direction::MoveUp ||
+                                    input.direction == Direction::MoveDown;
+    DrawPosition position{input.position_x, input.position_y - full_bounds.height * 0.5};
     const double strength = std::clamp(input.backward_motion, 0.0, 300.0) / 100.0;
 
     switch (input.anchor_mode) {
@@ -128,7 +130,7 @@ DrawPosition compute_draw_position(const LayoutInput &input,
             return position;
 
         case AnchorMode::CenterLocked:
-            position.x -= visible_bounds.width * 0.5;
+            position.x -= (vertical_direction ? full_bounds.width : visible_bounds.width) * 0.5;
             return position;
 
         case AnchorMode::LastCharacterLocked:

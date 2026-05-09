@@ -33,6 +33,10 @@ void expect_near(double actual, double expected, double tolerance, const std::st
     }
 }
 
+std::uint8_t alpha_at(const std::vector<std::uint8_t> &pixels, int rowbytes, int x, int y) {
+    return pixels[static_cast<std::size_t>(y * rowbytes + x * 4)];
+}
+
 void set_pixel(std::vector<std::uint8_t> &pixels, int rowbytes, int x, int y,
                std::uint8_t a, std::uint8_t r, std::uint8_t g, std::uint8_t b) {
     auto *pixel = pixels.data() + y * rowbytes + x * 4;
@@ -59,10 +63,6 @@ int main() {
     expect_true(spaced.newest_opacity >= 0.0 && spaced.newest_opacity <= 1.0,
                 "newest opacity is clamped");
 
-    expect_near(push_easing_multiplier(0.5, PushEasing::Linear), 0.5, 0.0001, "linear easing is unchanged");
-    expect_true(push_easing_multiplier(0.5, PushEasing::EaseOut) > 0.5, "ease out advances push earlier");
-    expect_near(push_easing_multiplier(1.0, PushEasing::EaseInOut), 1.0, 0.0001, "easing ends at one");
-
     constexpr int width = 12;
     constexpr int height = 8;
     constexpr int rowbytes = width * 4;
@@ -88,6 +88,8 @@ int main() {
                          bounds,
                          {2.0, 1.0},
                          half,
+                         Direction::MoveLeft,
+                         0.0,
                          1.0);
     const RasterBounds copied = find_alpha_bounds(target);
     expect_true(copied.found, "revealed raster copy should write pixels");
@@ -103,6 +105,62 @@ int main() {
                  1.0});
     const RasterBounds with_cursor = find_alpha_bounds(target);
     expect_true(with_cursor.max_x >= copied.max_x, "cursor draws at the active x position");
+
+    constexpr int reveal_width = 16;
+    constexpr int reveal_height = 12;
+    constexpr int reveal_rowbytes = reveal_width * 4;
+    std::vector<std::uint8_t> reveal_pixels(static_cast<std::size_t>(reveal_height * reveal_rowbytes), 0);
+    const RasterBounds reveal_bounds{true, 4, 3, 11, 8};
+    set_pixel(reveal_pixels, reveal_rowbytes, 4, 5, 255, 255, 0, 0);
+    set_pixel(reveal_pixels, reveal_rowbytes, 11, 5, 255, 0, 255, 0);
+    set_pixel(reveal_pixels, reveal_rowbytes, 7, 3, 255, 0, 0, 255);
+    set_pixel(reveal_pixels, reveal_rowbytes, 7, 8, 255, 255, 255, 0);
+    set_pixel(reveal_pixels, reveal_rowbytes, 3, 5, 255, 255, 255, 255);
+    PixelBuffer reveal_source{reveal_pixels.data(), reveal_width, reveal_height, reveal_rowbytes, PixelFormat::Argb8};
+    const RasterRevealState half_reveal = compute_raster_reveal("abcdefgh", 50.0, RevealMode::Character, 0.0);
+
+    auto copied_alpha_for = [&](Direction direction, double padding, int x, int y) {
+        std::vector<std::uint8_t> reveal_out(static_cast<std::size_t>(reveal_height * reveal_rowbytes), 0);
+        PixelBuffer reveal_target{reveal_out.data(), reveal_width, reveal_height, reveal_rowbytes, PixelFormat::Argb8};
+        copy_revealed_raster(reveal_source,
+                             reveal_target,
+                             reveal_bounds,
+                             {4.0, 3.0},
+                             half_reveal,
+                             direction,
+                             padding,
+                             1.0);
+        return alpha_at(reveal_out, reveal_rowbytes, x, y);
+    };
+
+    expect_true(copied_alpha_for(Direction::MoveLeft, 0.0, 4, 5) > 0,
+                "move-left reveals from the left edge");
+    expect_true(copied_alpha_for(Direction::MoveLeft, 0.0, 11, 5) == 0,
+                "move-left hides the unrevealed right edge");
+    expect_true(copied_alpha_for(Direction::MoveRight, 0.0, 11, 5) > 0,
+                "move-right reveals from the right edge");
+    expect_true(copied_alpha_for(Direction::MoveRight, 0.0, 4, 5) == 0,
+                "move-right hides the unrevealed left edge");
+    expect_true(copied_alpha_for(Direction::MoveUp, 0.0, 7, 3) > 0,
+                "move-up reveals from the top edge");
+    expect_true(copied_alpha_for(Direction::MoveDown, 0.0, 7, 8) > 0,
+                "move-down reveals from the bottom edge");
+    expect_true(copied_alpha_for(Direction::MoveLeft, 0.0, 3, 5) == 0,
+                "zero padding leaves out pixels outside measured bounds");
+    expect_true(copied_alpha_for(Direction::MoveLeft, 2.0, 3, 5) > 0,
+                "render padding includes pixels just outside measured bounds");
+
+    const DrawPosition left_cursor = cursor_position_for_reveal({10.0, 20.0},
+                                                                reveal_bounds,
+                                                                half_reveal,
+                                                                Direction::MoveLeft,
+                                                                3.0);
+    const DrawPosition right_cursor = cursor_position_for_reveal({10.0, 20.0},
+                                                                 reveal_bounds,
+                                                                 half_reveal,
+                                                                 Direction::MoveRight,
+                                                                 3.0);
+    expect_true(left_cursor.x > right_cursor.x, "cursor follows the active reveal edge for opposite directions");
 
     const std::string descender_cases[] = {
         "hello",

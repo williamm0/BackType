@@ -206,6 +206,52 @@ void fill_rect(const PixelBuffer &target,
     }
 }
 
+bool direction_is_horizontal(Direction direction) {
+    return direction == Direction::MoveLeft || direction == Direction::MoveRight;
+}
+
+bool source_pixel_is_revealed(int rel_x,
+                              int rel_y,
+                              int content_width,
+                              int content_height,
+                              int visible_width,
+                              int visible_height,
+                              Direction direction,
+                              int padding) {
+    switch (direction) {
+        case Direction::MoveRight:
+            return rel_x >= content_width - visible_width - padding;
+        case Direction::MoveUp:
+            return rel_y <= visible_height - 1 + padding;
+        case Direction::MoveDown:
+            return rel_y >= content_height - visible_height - padding;
+        case Direction::MoveLeft:
+        default:
+            return rel_x <= visible_width - 1 + padding;
+    }
+}
+
+bool source_pixel_is_newest(int rel_x,
+                            int rel_y,
+                            int content_width,
+                            int content_height,
+                            int previous_width,
+                            int previous_height,
+                            Direction direction,
+                            int padding) {
+    switch (direction) {
+        case Direction::MoveRight:
+            return rel_x <= content_width - previous_width + padding;
+        case Direction::MoveUp:
+            return rel_y >= previous_height - padding;
+        case Direction::MoveDown:
+            return rel_y <= content_height - previous_height + padding;
+        case Direction::MoveLeft:
+        default:
+            return rel_x >= previous_width - padding;
+    }
+}
+
 } // namespace
 
 int RasterBounds::width() const {
@@ -263,19 +309,6 @@ RasterRevealState compute_raster_reveal(const std::string &text,
     const double fade_window = std::clamp(character_fade_percent / 100.0, 0.01, 1.0);
     state.newest_opacity = std::clamp(phase / fade_window, 0.0, 1.0);
     return state;
-}
-
-double push_easing_multiplier(double progress_unit, PushEasing easing) {
-    const double t = std::clamp(progress_unit, 0.0, 1.0);
-    switch (easing) {
-        case PushEasing::EaseOut:
-            return 1.0 - (1.0 - t) * (1.0 - t);
-        case PushEasing::EaseInOut:
-            return t < 0.5 ? 2.0 * t * t : 1.0 - std::pow(-2.0 * t + 2.0, 2.0) * 0.5;
-        case PushEasing::Linear:
-        default:
-            return t;
-    }
 }
 
 RasterBounds find_alpha_bounds(const PixelBuffer &source) {
@@ -336,11 +369,28 @@ Color average_alpha_color(const PixelBuffer &source, const RasterBounds &bounds)
     return {red / total_alpha, green / total_alpha, blue / total_alpha, 1.0};
 }
 
+TextBounds visible_raster_bounds(const RasterBounds &source_bounds,
+                                 const RasterRevealState &reveal,
+                                 Direction direction) {
+    if (!source_bounds.found) {
+        return {};
+    }
+
+    const double width = static_cast<double>(source_bounds.width());
+    const double height = static_cast<double>(source_bounds.height());
+    if (direction_is_horizontal(direction)) {
+        return {width * reveal.visible_fraction, height};
+    }
+    return {width, height * reveal.visible_fraction};
+}
+
 void copy_revealed_raster(const PixelBuffer &source,
                           const PixelBuffer &target,
                           const RasterBounds &source_bounds,
                           DrawPosition target_position,
                           const RasterRevealState &reveal,
+                          Direction direction,
+                          double render_padding,
                           double opacity) {
     if (!supports_argb8(source) || !supports_argb8(target) || !source_bounds.found ||
         reveal.visible_fraction <= 0.0 || opacity <= 0.0) {
@@ -349,24 +399,78 @@ void copy_revealed_raster(const PixelBuffer &source,
 
     const int content_width = source_bounds.width();
     const int content_height = source_bounds.height();
+    const int padding = std::clamp(static_cast<int>(std::ceil(std::max(0.0, render_padding))), 0, 200);
     const int visible_width = std::clamp(static_cast<int>(std::ceil(content_width * reveal.visible_fraction)), 0, content_width);
     const int previous_width = std::clamp(static_cast<int>(std::floor(content_width * reveal.previous_fraction)), 0, visible_width);
+    const int visible_height = std::clamp(static_cast<int>(std::ceil(content_height * reveal.visible_fraction)), 0, content_height);
+    const int previous_height = std::clamp(static_cast<int>(std::floor(content_height * reveal.previous_fraction)), 0, visible_height);
     const int target_left = static_cast<int>(std::lround(target_position.x));
     const int target_top = static_cast<int>(std::lround(target_position.y));
 
-    for (int y = 0; y < content_height; ++y) {
-        for (int x = 0; x < visible_width; ++x) {
+    const int source_left = std::max(0, source_bounds.min_x - padding);
+    const int source_top = std::max(0, source_bounds.min_y - padding);
+    const int source_right = std::min(source.width - 1, source_bounds.max_x + padding);
+    const int source_bottom = std::min(source.height - 1, source_bounds.max_y + padding);
+
+    for (int source_y = source_top; source_y <= source_bottom; ++source_y) {
+        for (int source_x = source_left; source_x <= source_right; ++source_x) {
+            const int rel_x = source_x - source_bounds.min_x;
+            const int rel_y = source_y - source_bounds.min_y;
+            if (!source_pixel_is_revealed(rel_x,
+                                          rel_y,
+                                          content_width,
+                                          content_height,
+                                          visible_width,
+                                          visible_height,
+                                          direction,
+                                          padding)) {
+                continue;
+            }
+
             double pixel_opacity = opacity;
-            if (x >= previous_width && reveal.newest_opacity < 1.0) {
+            if (source_pixel_is_newest(rel_x,
+                                       rel_y,
+                                       content_width,
+                                       content_height,
+                                       previous_width,
+                                       previous_height,
+                                       direction,
+                                       padding) &&
+                reveal.newest_opacity < 1.0) {
                 pixel_opacity *= reveal.newest_opacity;
             }
 
             composite_pixel(target,
-                            target_left + x,
-                            target_top + y,
-                            read_pixel(source, source_bounds.min_x + x, source_bounds.min_y + y),
+                            target_left + rel_x,
+                            target_top + rel_y,
+                            read_pixel(source, source_x, source_y),
                             pixel_opacity);
         }
+    }
+}
+
+DrawPosition cursor_position_for_reveal(DrawPosition target_position,
+                                        const RasterBounds &source_bounds,
+                                        const RasterRevealState &reveal,
+                                        Direction direction,
+                                        double cursor_offset) {
+    const double content_width = static_cast<double>(source_bounds.width());
+    const double content_height = static_cast<double>(source_bounds.height());
+    const double visible_width = content_width * reveal.visible_fraction;
+    const double visible_height = content_height * reveal.visible_fraction;
+
+    switch (direction) {
+        case Direction::MoveRight:
+            return {target_position.x - cursor_offset, target_position.y};
+        case Direction::MoveUp:
+            return {target_position.x + content_width + cursor_offset,
+                    target_position.y + std::max(0.0, visible_height - content_height)};
+        case Direction::MoveDown:
+            return {target_position.x + content_width + cursor_offset,
+                    target_position.y + content_height - visible_height};
+        case Direction::MoveLeft:
+        default:
+            return {target_position.x + visible_width + cursor_offset, target_position.y};
     }
 }
 

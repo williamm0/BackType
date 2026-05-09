@@ -27,10 +27,4 @@ enum class CursorStyle {
     Underscore = 3
 };
 
-enum class PushEasing {
-    Linear = 1,
-    EaseOut = 2,
-    EaseInOut = 3
-};
-
 } // namespace backtype

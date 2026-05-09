@@ -24,6 +24,14 @@
 #include <new>
 #include <string>
 
+static_assert(BACKTYPE_AE_EFFECT_VERSION ==
+                  PF_VERSION(BACKTYPE_VERSION_MAJOR,
+                             BACKTYPE_VERSION_MINOR,
+                             BACKTYPE_VERSION_PATCH,
+                             PF_Stage_DEVELOP,
+                             BACKTYPE_VERSION_BUILD),
+              "BackType encoded AE version must match PF_VERSION.");
+
 enum BackTypeParam {
     BACKTYPE_INPUT = 0,
     BACKTYPE_PROGRESS,
@@ -38,7 +46,7 @@ enum BackTypeParam {
     BACKTYPE_CURSOR_BLINK_SPEED,
     BACKTYPE_CURSOR_OFFSET,
     BACKTYPE_CHARACTER_FADE,
-    BACKTYPE_PUSH_EASING,
+    BACKTYPE_RENDER_PADDING,
     BACKTYPE_OPACITY,
     BACKTYPE_NUM_PARAMS
 };
@@ -57,7 +65,7 @@ enum BackTypeDiskId {
     BACKTYPE_OPACITY_DISK_ID = 18,
     BACKTYPE_CURSOR_STYLE_DISK_ID,
     BACKTYPE_CHARACTER_FADE_DISK_ID,
-    BACKTYPE_PUSH_EASING_DISK_ID
+    BACKTYPE_RENDER_PADDING_DISK_ID
 };
 
 namespace {
@@ -170,11 +178,7 @@ PF_Err global_setup(PF_OutData *out_data) {
         return PF_Err_BAD_CALLBACK_PARAM;
     }
 
-    out_data->my_version = PF_VERSION(BACKTYPE_VERSION_MAJOR,
-                                      BACKTYPE_VERSION_MINOR,
-                                      BACKTYPE_VERSION_PATCH,
-                                      PF_Stage_DEVELOP,
-                                      BACKTYPE_VERSION_BUILD);
+    out_data->my_version = BACKTYPE_AE_EFFECT_VERSION;
     out_data->out_flags = 0;
     out_data->out_flags2 = 0;
     return PF_Err_NONE;
@@ -307,11 +311,16 @@ PF_Err params_setup(PF_InData *in_data, PF_OutData *out_data) {
                          BACKTYPE_CHARACTER_FADE_DISK_ID);
 
     AEFX_CLR_STRUCT(def);
-    PF_ADD_POPUP(backtype_strings::kPushEasing,
-                 3,
-                 1,
-                 "Linear|Ease Out|Ease In Out",
-                 BACKTYPE_PUSH_EASING_DISK_ID);
+    PF_ADD_FLOAT_SLIDERX(backtype_strings::kRenderPadding,
+                         0.0,
+                         200.0,
+                         0.0,
+                         200.0,
+                         8.0,
+                         PF_Precision_INTEGER,
+                         0,
+                         0,
+                         BACKTYPE_RENDER_PADDING_DISK_ID);
 
     AEFX_CLR_STRUCT(def);
     PF_ADD_FLOAT_SLIDERX(backtype_strings::kOpacity,
@@ -471,32 +480,39 @@ PF_Err render(PF_InData *in_data, PF_ParamDef *params[], PF_LayerDef *output) {
     const double position_y = (slider_value(params[BACKTYPE_POSITION_Y], 50.0) / 100.0) * output->height;
     const double backward_motion = std::clamp(slider_value(params[BACKTYPE_BACKWARD_MOTION], 100.0), 0.0, 300.0);
     const double cursor_offset = std::clamp(slider_value(params[BACKTYPE_CURSOR_OFFSET], 8.0), -100.0, 100.0);
+    const double render_padding = std::clamp(slider_value(params[BACKTYPE_RENDER_PADDING], 8.0), 0.0, 200.0);
     const double opacity = backtype::clamp_percent(slider_value(params[BACKTYPE_OPACITY], 100.0)) / 100.0;
     const double character_fade = backtype::clamp_percent(slider_value(params[BACKTYPE_CHARACTER_FADE], 0.0));
     const backtype::RasterRevealState reveal = backtype::compute_raster_reveal(text, progress, reveal_mode, character_fade);
-    const double visible_width = static_cast<double>(source_bounds.width()) * reveal.visible_fraction;
+    const auto direction = static_cast<backtype::Direction>(
+        std::clamp(popup_value(params[BACKTYPE_DIRECTION], 1), 1, 4));
+    const backtype::TextBounds visible_bounds = backtype::visible_raster_bounds(source_bounds, reveal, direction);
     const double stable_height = static_cast<double>(source_bounds.height());
-    const auto push_easing = static_cast<backtype::PushEasing>(
-        std::clamp(popup_value(params[BACKTYPE_PUSH_EASING], 1), 1, 3));
-    const double push_scale = backtype::push_easing_multiplier(progress / 100.0, push_easing);
 
     const backtype::LayoutInput layout{
         static_cast<backtype::AnchorMode>(std::clamp(popup_value(params[BACKTYPE_ANCHOR_MODE], 3), 1, 4)),
-        static_cast<backtype::Direction>(std::clamp(popup_value(params[BACKTYPE_DIRECTION], 1), 1, 4)),
+        direction,
         position_x,
         position_y,
-        backward_motion * push_scale};
+        backward_motion};
 
     const backtype::DrawPosition draw_position = backtype::compute_draw_position(
         layout,
-        {visible_width, stable_height},
+        visible_bounds,
         {static_cast<double>(source_bounds.width()), stable_height});
 
     const double comp_seconds = in_data->time_scale != 0
                                     ? static_cast<double>(in_data->current_time) / static_cast<double>(in_data->time_scale)
                                     : 0.0;
 
-    backtype::copy_revealed_raster(source, target, source_bounds, draw_position, reveal, opacity);
+    backtype::copy_revealed_raster(source,
+                                   target,
+                                   source_bounds,
+                                   draw_position,
+                                   reveal,
+                                   direction,
+                                   render_padding,
+                                   opacity);
 
     const bool draw_cursor = checkbox_value(params[BACKTYPE_CURSOR_ENABLED], true) &&
                              backtype::cursor_visible(comp_seconds, slider_value(params[BACKTYPE_CURSOR_BLINK_SPEED], 2.0));
@@ -504,9 +520,15 @@ PF_Err render(PF_InData *in_data, PF_ParamDef *params[], PF_LayerDef *output) {
         const backtype::Color cursor_color = backtype::average_alpha_color(source, source_bounds);
         const auto cursor_style = static_cast<backtype::CursorStyle>(
             std::clamp(popup_value(params[BACKTYPE_CURSOR_STYLE], 1), 1, 3));
+        const backtype::DrawPosition cursor_position = backtype::cursor_position_for_reveal(
+            draw_position,
+            source_bounds,
+            reveal,
+            direction,
+            cursor_offset);
         backtype::draw_cursor(target,
                               {cursor_style,
-                               {draw_position.x + visible_width + cursor_offset, draw_position.y},
+                               cursor_position,
                                stable_height,
                                std::max(1.0, stable_height * 0.06),
                                cursor_color,

@@ -1,4 +1,5 @@
 #include "AE_EffectVers.h"
+#include "BackType.h"
 
 #ifndef AE_OS_WIN
     #ifndef AE_OS_MAC
@@ -6,11 +7,6 @@
     #endif
     #include <AE_General.r>
 #endif
-
-#define BACKTYPE_VERSION_MAJOR 0
-#define BACKTYPE_VERSION_MINOR 1
-#define BACKTYPE_VERSION_PATCH 3
-#define BACKTYPE_VERSION_BUILD 1
 
 resource 'PiPL' (16000) {
     {
@@ -27,12 +23,7 @@ resource 'PiPL' (16000) {
 
         AE_PiPL_Version { 2, 0 },
         AE_Effect_Spec_Version { PF_PLUG_IN_VERSION, PF_PLUG_IN_SUBVERS },
-        AE_Effect_Version {
-            (BACKTYPE_VERSION_MAJOR << 19) |
-            (BACKTYPE_VERSION_MINOR << 15) |
-            (BACKTYPE_VERSION_PATCH << 4) |
-            BACKTYPE_VERSION_BUILD
-        },
+        AE_Effect_Version { BACKTYPE_AE_EFFECT_VERSION },
         AE_Effect_Info_Flags { 0 },
         AE_Effect_Global_OutFlags {
             0
