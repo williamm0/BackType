@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstdint>
 #include <vector>
 
 namespace backtype {
@@ -38,16 +37,6 @@ std::vector<std::size_t> word_end_byte_offsets(const std::string &text) {
     }
 
     return ends;
-}
-
-std::uint32_t hash_jitter_seed(std::size_t character_index, long frame_index) {
-    std::uint32_t value = 2166136261u;
-    value ^= static_cast<std::uint32_t>(character_index + 1u);
-    value *= 16777619u;
-    value ^= static_cast<std::uint32_t>(frame_index + 0x9E3779B9u);
-    value *= 16777619u;
-    value ^= value >> 16;
-    return value;
 }
 
 } // namespace
@@ -176,16 +165,6 @@ bool cursor_visible(double comp_time_seconds, double blink_speed) {
 
     const double phase = std::fmod(std::max(0.0, comp_time_seconds) * blink_speed, 2.0);
     return phase < 1.0;
-}
-
-double deterministic_jitter(std::size_t character_index, long frame_index, double amount) {
-    if (amount <= 0.0 || !std::isfinite(amount)) {
-        return 0.0;
-    }
-
-    const std::uint32_t hash = hash_jitter_seed(character_index, frame_index);
-    const double normalized = static_cast<double>(hash & 0xFFFFu) / 65535.0;
-    return (normalized * 2.0 - 1.0) * amount;
 }
 
 } // namespace backtype

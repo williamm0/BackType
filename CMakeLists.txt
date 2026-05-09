@@ -4,7 +4,7 @@ if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin" AND NOT DEFINED CMAKE_OSX_ARCHITECTU
     set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "macOS architectures")
 endif()
 
-project(BackType VERSION 0.1.2 LANGUAGES CXX)
+project(BackType VERSION 0.1.3 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -24,26 +24,12 @@ if(BACKTYPE_BUILD_TESTS)
     )
     target_include_directories(backtype_text_logic_tests PRIVATE src)
 
-    add_executable(backtype_text_data_tests
-        tests/BackType_TextDataTests.cpp
-        src/BackType_TextData.cpp
+    add_executable(backtype_raster_logic_tests
+        tests/BackType_RasterLogicTests.cpp
+        src/BackType_RasterLogic.cpp
+        src/BackType_TextLogic.cpp
     )
-    target_include_directories(backtype_text_data_tests PRIVATE src)
-
-    if(APPLE)
-        add_executable(backtype_render_smoke
-            tests/BackType_RenderSmoke.mm
-            src/BackType_TextLogic.cpp
-            src/TextRenderer_macOS.mm
-        )
-        target_include_directories(backtype_render_smoke PRIVATE src)
-        target_compile_definitions(backtype_render_smoke PRIVATE MAC_ENV=1)
-        target_link_libraries(backtype_render_smoke PRIVATE
-            "-framework CoreFoundation"
-            "-framework CoreGraphics"
-            "-framework CoreText"
-        )
-    endif()
+    target_include_directories(backtype_raster_logic_tests PRIVATE src)
 endif()
 
 if(NOT BACKTYPE_BUILD_AE_PLUGIN)
@@ -84,13 +70,14 @@ message(STATUS "Using AE SDK examples directory: ${BACKTYPE_AE_SDK_EXAMPLES_DIR}
 
 set(BACKTYPE_COMMON_SOURCES
     src/BackType.cpp
+    src/BackType_RasterLogic.cpp
     src/BackType_Strings.cpp
-    src/BackType_TextData.cpp
     src/BackType_TextLogic.cpp
 )
 
 set(BACKTYPE_SDK_INCLUDE_DIRS
     "${BACKTYPE_AE_SDK_EXAMPLES_DIR}/Headers"
+    "${BACKTYPE_AE_SDK_EXAMPLES_DIR}/Headers/SP"
     "${BACKTYPE_AE_SDK_EXAMPLES_DIR}/Resources"
     "${BACKTYPE_AE_SDK_EXAMPLES_DIR}/Util"
 )
@@ -124,8 +111,6 @@ if(WIN32)
 
     add_library(BackType MODULE
         ${BACKTYPE_COMMON_SOURCES}
-        src/TextRenderer_Windows.cpp
-        src/TextEditor_Windows.cpp
         "${BACKTYPE_GENERATED_DIR}/BackType.rc"
         "${BACKTYPE_PIPL_RRC}"
     )
@@ -149,8 +134,6 @@ if(WIN32)
 elseif(APPLE)
     add_library(BackType MODULE
         ${BACKTYPE_COMMON_SOURCES}
-        src/TextEditor_macOS.mm
-        src/TextRenderer_macOS.mm
     )
 
     target_include_directories(BackType PRIVATE
@@ -162,9 +145,6 @@ elseif(APPLE)
     )
     target_link_libraries(BackType PRIVATE
         "-framework CoreFoundation"
-        "-framework CoreGraphics"
-        "-framework CoreText"
-        "-framework AppKit"
     )
     set_target_properties(BackType PROPERTIES
         PREFIX ""

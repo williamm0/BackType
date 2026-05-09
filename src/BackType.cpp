@@ -1,10 +1,8 @@
 #include "BackType.h"
 #include "BackType_Enums.h"
+#include "BackType_RasterLogic.h"
 #include "BackType_Strings.h"
-#include "BackType_TextData.h"
 #include "BackType_TextLogic.h"
-#include "TextEditor.h"
-#include "TextRenderer.h"
 
 #include "AEConfig.h"
 
@@ -15,6 +13,7 @@
 #include "entry.h"
 #include "AE_Effect.h"
 #include "AE_EffectCB.h"
+#include "AE_GeneralPlug.h"
 #include "AE_Macros.h"
 #include "AE_PluginData.h"
 #include "Param_Utils.h"
@@ -24,15 +23,10 @@
 #include <cstring>
 #include <new>
 #include <string>
-#include <vector>
 
 enum BackTypeParam {
     BACKTYPE_INPUT = 0,
-    BACKTYPE_TEXT,
-    BACKTYPE_TEXT_SOURCE,
     BACKTYPE_PROGRESS,
-    BACKTYPE_FONT_SIZE,
-    BACKTYPE_TEXT_COLOR,
     BACKTYPE_POSITION_X,
     BACKTYPE_POSITION_Y,
     BACKTYPE_ANCHOR_MODE,
@@ -40,21 +34,17 @@ enum BackTypeParam {
     BACKTYPE_DIRECTION,
     BACKTYPE_REVEAL_MODE,
     BACKTYPE_CURSOR_ENABLED,
-    BACKTYPE_CURSOR_CHARACTER,
+    BACKTYPE_CURSOR_STYLE,
     BACKTYPE_CURSOR_BLINK_SPEED,
     BACKTYPE_CURSOR_OFFSET,
-    BACKTYPE_POP_AMOUNT,
-    BACKTYPE_JITTER_AMOUNT,
+    BACKTYPE_CHARACTER_FADE,
+    BACKTYPE_PUSH_EASING,
     BACKTYPE_OPACITY,
     BACKTYPE_NUM_PARAMS
 };
 
 enum BackTypeDiskId {
-    BACKTYPE_TEXT_DISK_ID = 1,
-    BACKTYPE_TEXT_SOURCE_DISK_ID,
-    BACKTYPE_PROGRESS_DISK_ID,
-    BACKTYPE_FONT_SIZE_DISK_ID,
-    BACKTYPE_TEXT_COLOR_DISK_ID,
+    BACKTYPE_PROGRESS_DISK_ID = 3,
     BACKTYPE_POSITION_X_DISK_ID,
     BACKTYPE_POSITION_Y_DISK_ID,
     BACKTYPE_ANCHOR_MODE_DISK_ID,
@@ -62,67 +52,105 @@ enum BackTypeDiskId {
     BACKTYPE_DIRECTION_DISK_ID,
     BACKTYPE_REVEAL_MODE_DISK_ID,
     BACKTYPE_CURSOR_ENABLED_DISK_ID,
-    BACKTYPE_CURSOR_CHARACTER_DISK_ID,
     BACKTYPE_CURSOR_BLINK_SPEED_DISK_ID,
     BACKTYPE_CURSOR_OFFSET_DISK_ID,
-    BACKTYPE_POP_AMOUNT_DISK_ID,
-    BACKTYPE_JITTER_AMOUNT_DISK_ID,
-    BACKTYPE_OPACITY_DISK_ID
+    BACKTYPE_OPACITY_DISK_ID = 18,
+    BACKTYPE_CURSOR_STYLE_DISK_ID,
+    BACKTYPE_CHARACTER_FADE_DISK_ID,
+    BACKTYPE_PUSH_EASING_DISK_ID
 };
 
 namespace {
 
-PF_Handle create_sequence_handle(PF_InData *in_data, const std::string &text) {
-    if (!in_data || !in_data->utils) {
-        return nullptr;
+AEGP_PluginID s_aegp_plugin_id = 0;
+
+template <typename SuiteT>
+class SuiteLease {
+public:
+    SuiteLease(SPBasicSuite *basic, const char *name, int version)
+        : basic_(basic), name_(name), version_(version) {
+        if (basic_) {
+            const void *suite = nullptr;
+            if (!basic_->AcquireSuite(name_, version_, &suite)) {
+                suite_ = reinterpret_cast<SuiteT *>(const_cast<void *>(suite));
+            }
+        }
     }
 
-    PF_Handle handle = PF_NEW_HANDLE(sizeof(BackTypeTextData));
-    if (!handle) {
-        return nullptr;
+    ~SuiteLease() {
+        if (basic_ && suite_) {
+            basic_->ReleaseSuite(name_, version_);
+        }
     }
 
-    auto *data = reinterpret_cast<BackTypeTextData *>(PF_LOCK_HANDLE(handle));
-    if (!data) {
-        PF_DISPOSE_HANDLE(handle);
-        return nullptr;
+    SuiteT *operator->() const {
+        return suite_;
     }
 
-    backtype::set_text_data(data, text);
-    PF_UNLOCK_HANDLE(handle);
-    return handle;
-}
-
-std::string text_from_sequence(PF_InData *in_data, const char *fallback) {
-    PF_Handle handle = in_data ? in_data->sequence_data : nullptr;
-    if (!in_data || !handle) {
-        return fallback ? fallback : "";
+    explicit operator bool() const {
+        return suite_ != nullptr;
     }
 
-    auto *data = reinterpret_cast<const BackTypeTextData *>(PF_LOCK_HANDLE(handle));
-    if (!data) {
-        return fallback ? fallback : "";
+private:
+    SPBasicSuite *basic_ = nullptr;
+    const char *name_ = nullptr;
+    int version_ = 0;
+    SuiteT *suite_ = nullptr;
+};
+
+PF_Err ensure_aegp_registration(PF_InData *in_data) {
+    if (s_aegp_plugin_id || !in_data || !in_data->pica_basicP) {
+        return PF_Err_NONE;
     }
 
-    const std::string text = backtype::text_from_data(data);
-    PF_UNLOCK_HANDLE(handle);
-    return text;
-}
-
-PF_Err set_sequence_text(PF_InData *in_data, PF_OutData *out_data, const std::string &text) {
-    if (!in_data || !out_data || !in_data->sequence_data) {
-        return PF_Err_BAD_CALLBACK_PARAM;
+    SuiteLease<AEGP_UtilitySuite6> utility(in_data->pica_basicP, kAEGPUtilitySuite, kAEGPUtilitySuiteVersion6);
+    if (!utility) {
+        return PF_Err_NONE;
     }
 
-    auto *data = reinterpret_cast<BackTypeTextData *>(PF_LOCK_HANDLE(in_data->sequence_data));
-    if (!data) {
-        return PF_Err_OUT_OF_MEMORY;
+    AEGP_PluginID plugin_id = 0;
+    if (!utility->AEGP_RegisterWithAEGP(nullptr, BACKTYPE_NAME, &plugin_id)) {
+        s_aegp_plugin_id = plugin_id;
     }
-
-    backtype::set_text_data(data, text);
-    PF_UNLOCK_HANDLE(in_data->sequence_data);
-    out_data->sequence_data = in_data->sequence_data;
     return PF_Err_NONE;
+}
+
+std::string utf16_to_utf8(const A_u_short *text, std::size_t length) {
+    std::string result;
+    result.reserve(length);
+
+    for (std::size_t i = 0; i < length; ++i) {
+        std::uint32_t codepoint = text[i];
+        if (codepoint == 0) {
+            break;
+        }
+
+        if (codepoint >= 0xD800 && codepoint <= 0xDBFF && i + 1 < length) {
+            const std::uint32_t low = text[i + 1];
+            if (low >= 0xDC00 && low <= 0xDFFF) {
+                codepoint = 0x10000 + ((codepoint - 0xD800) << 10) + (low - 0xDC00);
+                ++i;
+            }
+        }
+
+        if (codepoint <= 0x7F) {
+            result.push_back(static_cast<char>(codepoint));
+        } else if (codepoint <= 0x7FF) {
+            result.push_back(static_cast<char>(0xC0 | (codepoint >> 6)));
+            result.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+        } else if (codepoint <= 0xFFFF) {
+            result.push_back(static_cast<char>(0xE0 | (codepoint >> 12)));
+            result.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
+            result.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+        } else {
+            result.push_back(static_cast<char>(0xF0 | (codepoint >> 18)));
+            result.push_back(static_cast<char>(0x80 | ((codepoint >> 12) & 0x3F)));
+            result.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
+            result.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+        }
+    }
+
+    return result;
 }
 
 PF_Err about(PF_OutData *out_data) {
@@ -147,47 +175,8 @@ PF_Err global_setup(PF_OutData *out_data) {
                                       BACKTYPE_VERSION_PATCH,
                                       PF_Stage_DEVELOP,
                                       BACKTYPE_VERSION_BUILD);
-    out_data->out_flags = PF_OutFlag_PIX_INDEPENDENT;
+    out_data->out_flags = 0;
     out_data->out_flags2 = 0;
-    return PF_Err_NONE;
-}
-
-PF_Err sequence_setup(PF_InData *in_data, PF_OutData *out_data) {
-    if (!in_data || !out_data) {
-        return PF_Err_BAD_CALLBACK_PARAM;
-    }
-
-    if (out_data->sequence_data) {
-        PF_DISPOSE_HANDLE(out_data->sequence_data);
-        out_data->sequence_data = nullptr;
-    }
-
-    out_data->sequence_data = create_sequence_handle(in_data, BACKTYPE_DEFAULT_TEXT);
-    return out_data->sequence_data ? PF_Err_NONE : PF_Err_OUT_OF_MEMORY;
-}
-
-PF_Err sequence_resetup(PF_InData *in_data, PF_OutData *out_data) {
-    if (!in_data || !out_data) {
-        return PF_Err_BAD_CALLBACK_PARAM;
-    }
-
-    if (in_data->sequence_data) {
-        out_data->sequence_data = in_data->sequence_data;
-        return PF_Err_NONE;
-    }
-
-    return sequence_setup(in_data, out_data);
-}
-
-PF_Err sequence_setdown(PF_InData *in_data, PF_OutData *out_data) {
-    if (!in_data || !out_data) {
-        return PF_Err_BAD_CALLBACK_PARAM;
-    }
-
-    if (in_data->sequence_data) {
-        PF_DISPOSE_HANDLE(in_data->sequence_data);
-    }
-    out_data->sequence_data = nullptr;
     return PF_Err_NONE;
 }
 
@@ -200,20 +189,6 @@ PF_Err params_setup(PF_InData *in_data, PF_OutData *out_data) {
     PF_ParamDef def;
 
     AEFX_CLR_STRUCT(def);
-    PF_ADD_BUTTON(backtype_strings::kText,
-                  "Edit Text...",
-                  0,
-                  PF_ParamFlag_SUPERVISE,
-                  BACKTYPE_TEXT_DISK_ID);
-
-    AEFX_CLR_STRUCT(def);
-    PF_ADD_POPUP(backtype_strings::kTextSource,
-                 2,
-                 1,
-                 "Plugin Text|Layer Text",
-                 BACKTYPE_TEXT_SOURCE_DISK_ID);
-
-    AEFX_CLR_STRUCT(def);
     PF_ADD_FLOAT_SLIDERX(backtype_strings::kProgress,
                          0.0,
                          100.0,
@@ -224,21 +199,6 @@ PF_Err params_setup(PF_InData *in_data, PF_OutData *out_data) {
                          0,
                          0,
                          BACKTYPE_PROGRESS_DISK_ID);
-
-    AEFX_CLR_STRUCT(def);
-    PF_ADD_FLOAT_SLIDERX(backtype_strings::kFontSize,
-                         8.0,
-                         300.0,
-                         8.0,
-                         300.0,
-                         72.0,
-                         PF_Precision_INTEGER,
-                         0,
-                         0,
-                         BACKTYPE_FONT_SIZE_DISK_ID);
-
-    AEFX_CLR_STRUCT(def);
-    PF_ADD_COLOR(backtype_strings::kTextColor, 255, 255, 255, BACKTYPE_TEXT_COLOR_DISK_ID);
 
     AEFX_CLR_STRUCT(def);
     PF_ADD_FLOAT_SLIDERX(backtype_strings::kPositionX,
@@ -304,11 +264,11 @@ PF_Err params_setup(PF_InData *in_data, PF_OutData *out_data) {
                      BACKTYPE_CURSOR_ENABLED_DISK_ID);
 
     AEFX_CLR_STRUCT(def);
-    PF_ADD_POPUP(backtype_strings::kCursorCharacter,
+    PF_ADD_POPUP(backtype_strings::kCursorStyle,
+                 3,
                  1,
-                 1,
-                 "Vertical Bar",
-                 BACKTYPE_CURSOR_CHARACTER_DISK_ID);
+                 "Line|Block|Underscore",
+                 BACKTYPE_CURSOR_STYLE_DISK_ID);
 
     AEFX_CLR_STRUCT(def);
     PF_ADD_FLOAT_SLIDERX(backtype_strings::kCursorBlinkSpeed,
@@ -335,7 +295,7 @@ PF_Err params_setup(PF_InData *in_data, PF_OutData *out_data) {
                          BACKTYPE_CURSOR_OFFSET_DISK_ID);
 
     AEFX_CLR_STRUCT(def);
-    PF_ADD_FLOAT_SLIDERX(backtype_strings::kPopAmount,
+    PF_ADD_FLOAT_SLIDERX(backtype_strings::kCharacterFade,
                          0.0,
                          100.0,
                          0.0,
@@ -344,19 +304,14 @@ PF_Err params_setup(PF_InData *in_data, PF_OutData *out_data) {
                          PF_Precision_INTEGER,
                          0,
                          0,
-                         BACKTYPE_POP_AMOUNT_DISK_ID);
+                         BACKTYPE_CHARACTER_FADE_DISK_ID);
 
     AEFX_CLR_STRUCT(def);
-    PF_ADD_FLOAT_SLIDERX(backtype_strings::kJitterAmount,
-                         0.0,
-                         50.0,
-                         0.0,
-                         50.0,
-                         0.0,
-                         PF_Precision_INTEGER,
-                         0,
-                         0,
-                         BACKTYPE_JITTER_AMOUNT_DISK_ID);
+    PF_ADD_POPUP(backtype_strings::kPushEasing,
+                 3,
+                 1,
+                 "Linear|Ease Out|Ease In Out",
+                 BACKTYPE_PUSH_EASING_DISK_ID);
 
     AEFX_CLR_STRUCT(def);
     PF_ADD_FLOAT_SLIDERX(backtype_strings::kOpacity,
@@ -386,51 +341,90 @@ bool checkbox_value(PF_ParamDef *param, bool fallback) {
     return param ? param->u.bd.value != 0 : fallback;
 }
 
-std::vector<std::string> utf8_characters(const std::string &text) {
-    std::vector<std::string> chars;
-    for (std::size_t i = 0; i < text.size();) {
-        const auto ch = static_cast<unsigned char>(text[i]);
-        std::size_t length = 1;
-        if ((ch & 0xE0U) == 0xC0U) {
-            length = 2;
-        } else if ((ch & 0xF0U) == 0xE0U) {
-            length = 3;
-        } else if ((ch & 0xF8U) == 0xF0U) {
-            length = 4;
+std::string read_layer_source_text(PF_InData *in_data) {
+    if (!in_data || !in_data->effect_ref || !in_data->pica_basicP) {
+        return "";
+    }
+
+    if (ensure_aegp_registration(in_data) || !s_aegp_plugin_id) {
+        return "";
+    }
+
+    SuiteLease<AEGP_PFInterfaceSuite1> pf_interface(in_data->pica_basicP,
+                                                    kAEGPPFInterfaceSuite,
+                                                    kAEGPPFInterfaceSuiteVersion1);
+    SuiteLease<AEGP_StreamSuite6> stream_suite(in_data->pica_basicP,
+                                               kAEGPStreamSuite,
+                                               kAEGPStreamSuiteVersion6);
+    SuiteLease<AEGP_TextDocumentSuite1> text_suite(in_data->pica_basicP,
+                                                   kAEGPTextDocumentSuite,
+                                                   kAEGPTextDocumentSuiteVersion1);
+    SuiteLease<AEGP_MemorySuite1> memory_suite(in_data->pica_basicP,
+                                               kAEGPMemorySuite,
+                                               kAEGPMemorySuiteVersion1);
+    if (!pf_interface || !stream_suite || !text_suite || !memory_suite) {
+        return "";
+    }
+
+    AEGP_LayerH layer = nullptr;
+    AEGP_StreamRefH text_stream = nullptr;
+    AEGP_StreamValue2 stream_value;
+    AEFX_CLR_STRUCT(stream_value);
+    AEGP_MemHandle unicode_handle = nullptr;
+    bool have_stream_value = false;
+    std::string text;
+
+    const A_Time layer_time{in_data->current_time, in_data->time_scale != 0 ? in_data->time_scale : 1};
+
+    if (pf_interface->AEGP_GetEffectLayer(in_data->effect_ref, &layer) || !layer) {
+        return "";
+    }
+    if (stream_suite->AEGP_GetNewLayerStream(s_aegp_plugin_id, layer, AEGP_LayerStream_SOURCE_TEXT, &text_stream) ||
+        !text_stream) {
+        return "";
+    }
+
+    AEGP_StreamType stream_type = AEGP_StreamType_NO_DATA;
+    if (!stream_suite->AEGP_GetStreamType(text_stream, &stream_type) &&
+        stream_type == AEGP_StreamType_TEXT_DOCUMENT &&
+        !stream_suite->AEGP_GetNewStreamValue(s_aegp_plugin_id,
+                                              text_stream,
+                                              AEGP_LTimeMode_LayerTime,
+                                              &layer_time,
+                                              FALSE,
+                                              &stream_value)) {
+        have_stream_value = true;
+    }
+
+    if (have_stream_value &&
+        stream_value.val.text_documentH &&
+        !text_suite->AEGP_GetNewText(s_aegp_plugin_id, stream_value.val.text_documentH, &unicode_handle) &&
+        unicode_handle) {
+        AEGP_MemSize bytes = 0;
+        A_u_short *unicode = nullptr;
+        if (!memory_suite->AEGP_GetMemHandleSize(unicode_handle, &bytes) &&
+            !memory_suite->AEGP_LockMemHandle(unicode_handle, reinterpret_cast<void **>(&unicode)) &&
+            unicode) {
+            const std::size_t max_units = static_cast<std::size_t>(bytes / sizeof(A_u_short));
+            std::size_t length = 0;
+            while (length < max_units && unicode[length] != 0) {
+                ++length;
+            }
+            text = utf16_to_utf8(unicode, length);
+            memory_suite->AEGP_UnlockMemHandle(unicode_handle);
         }
-        length = std::min(length, text.size() - i);
-        chars.push_back(text.substr(i, length));
-        i += length;
-    }
-    return chars;
-}
-
-void render_visible_text(const backtype::PixelBuffer &target,
-                         const std::string &visible,
-                         double x,
-                         double y,
-                         double font_size,
-                         const backtype::Color &color,
-                         double opacity,
-                         double jitter_amount,
-                         long frame_index) {
-    if (visible.empty()) {
-        return;
     }
 
-    if (jitter_amount <= 0.0) {
-        backtype::render_text(target, {visible, x, y, font_size, color, opacity});
-        return;
+    if (unicode_handle) {
+        memory_suite->AEGP_FreeMemHandle(unicode_handle);
     }
-
-    double advance = 0.0;
-    const auto characters = utf8_characters(visible);
-    for (std::size_t i = 0; i < characters.size(); ++i) {
-        const double jitter_x = backtype::deterministic_jitter(i, frame_index, jitter_amount);
-        const double jitter_y = backtype::deterministic_jitter(i + 8192, frame_index, jitter_amount);
-        backtype::render_text(target, {characters[i], x + advance + jitter_x, y + jitter_y, font_size, color, opacity});
-        advance += backtype::measure_text(characters[i], font_size).width;
+    if (have_stream_value) {
+        stream_suite->AEGP_DisposeStreamValue(&stream_value);
     }
+    if (text_stream) {
+        stream_suite->AEGP_DisposeStream(text_stream);
+    }
+    return text;
 }
 
 PF_Err render(PF_InData *in_data, PF_ParamDef *params[], PF_LayerDef *output) {
@@ -446,116 +440,80 @@ PF_Err render(PF_InData *in_data, PF_ParamDef *params[], PF_LayerDef *output) {
     target.format = backtype::PixelFormat::Argb8;
     backtype::clear_target(target);
 
-    const auto text_source = static_cast<backtype::TextSource>(
-        std::clamp(popup_value(params[BACKTYPE_TEXT_SOURCE], 1), 1, 2));
-    (void)text_source; // Layer text is exposed for UX, but render uses Plugin Text until AE source-text access is added.
-    const std::string text = text_from_sequence(in_data, BACKTYPE_DEFAULT_TEXT);
+    PF_LayerDef *input = params[BACKTYPE_INPUT] ? &params[BACKTYPE_INPUT]->u.ld : nullptr;
+    if (!input || !input->data || input->width <= 0 || input->height <= 0 ||
+        input->rowbytes < input->width * 4 || output->rowbytes < output->width * 4 ||
+        PF_WORLD_IS_DEEP(input) || PF_WORLD_IS_DEEP(output)) {
+        return PF_Err_NONE;
+    }
+
+    const std::string text = read_layer_source_text(in_data);
     const double progress = backtype::clamp_progress(slider_value(params[BACKTYPE_PROGRESS], 100.0));
-    if (text.empty() || progress <= 0.0) {
+    if (text.empty()) {
         return PF_Err_NONE;
     }
 
     const auto reveal_mode = static_cast<backtype::RevealMode>(
         std::clamp(popup_value(params[BACKTYPE_REVEAL_MODE], 1), 1, 2));
-    const std::string visible = backtype::visible_text(text, progress, reveal_mode);
-    if (visible.empty()) {
+    backtype::PixelBuffer source;
+    source.data = input->data;
+    source.width = input->width;
+    source.height = input->height;
+    source.rowbytes = input->rowbytes;
+    source.format = backtype::PixelFormat::Argb8;
+
+    const backtype::RasterBounds source_bounds = backtype::find_alpha_bounds(source);
+    if (!source_bounds.found) {
         return PF_Err_NONE;
     }
 
-    const double font_size = std::clamp(slider_value(params[BACKTYPE_FONT_SIZE], 72.0), 8.0, 300.0);
     const double position_x = (slider_value(params[BACKTYPE_POSITION_X], 50.0) / 100.0) * output->width;
     const double position_y = (slider_value(params[BACKTYPE_POSITION_Y], 50.0) / 100.0) * output->height;
     const double backward_motion = std::clamp(slider_value(params[BACKTYPE_BACKWARD_MOTION], 100.0), 0.0, 300.0);
     const double cursor_offset = std::clamp(slider_value(params[BACKTYPE_CURSOR_OFFSET], 8.0), -100.0, 100.0);
-    const double jitter_amount = std::clamp(slider_value(params[BACKTYPE_JITTER_AMOUNT], 0.0), 0.0, 50.0);
     const double opacity = backtype::clamp_percent(slider_value(params[BACKTYPE_OPACITY], 100.0)) / 100.0;
-    const double pop_amount = std::clamp(slider_value(params[BACKTYPE_POP_AMOUNT], 0.0), 0.0, 100.0);
-    (void)pop_amount; // TODO(v0.2): scale the newest character around its center as it appears.
-
-    PF_Pixel color_param;
-    color_param.red = 255;
-    color_param.green = 255;
-    color_param.blue = 255;
-    color_param.alpha = 255;
-    if (params[BACKTYPE_TEXT_COLOR]) {
-        color_param = params[BACKTYPE_TEXT_COLOR]->u.cd.value;
-    }
-    backtype::Color color;
-    color.r = static_cast<double>(color_param.red) / 255.0;
-    color.g = static_cast<double>(color_param.green) / 255.0;
-    color.b = static_cast<double>(color_param.blue) / 255.0;
-    color.a = 1.0;
-
-    const backtype::TextMetrics visible_metrics = backtype::measure_text(visible, font_size);
-    const backtype::TextMetrics full_metrics = backtype::measure_text(text, font_size);
+    const double character_fade = backtype::clamp_percent(slider_value(params[BACKTYPE_CHARACTER_FADE], 0.0));
+    const backtype::RasterRevealState reveal = backtype::compute_raster_reveal(text, progress, reveal_mode, character_fade);
+    const double visible_width = static_cast<double>(source_bounds.width()) * reveal.visible_fraction;
+    const double stable_height = static_cast<double>(source_bounds.height());
+    const auto push_easing = static_cast<backtype::PushEasing>(
+        std::clamp(popup_value(params[BACKTYPE_PUSH_EASING], 1), 1, 3));
+    const double push_scale = backtype::push_easing_multiplier(progress / 100.0, push_easing);
 
     const backtype::LayoutInput layout{
         static_cast<backtype::AnchorMode>(std::clamp(popup_value(params[BACKTYPE_ANCHOR_MODE], 3), 1, 4)),
         static_cast<backtype::Direction>(std::clamp(popup_value(params[BACKTYPE_DIRECTION], 1), 1, 4)),
         position_x,
         position_y,
-        backward_motion};
+        backward_motion * push_scale};
 
     const backtype::DrawPosition draw_position = backtype::compute_draw_position(
         layout,
-        {visible_metrics.width, full_metrics.height},
-        {full_metrics.width, full_metrics.height});
+        {visible_width, stable_height},
+        {static_cast<double>(source_bounds.width()), stable_height});
 
     const double comp_seconds = in_data->time_scale != 0
                                     ? static_cast<double>(in_data->current_time) / static_cast<double>(in_data->time_scale)
                                     : 0.0;
-    const long frame_index = in_data->time_step != 0 ? static_cast<long>(in_data->current_time / in_data->time_step) : 0;
 
-    render_visible_text(target,
-                        visible,
-                        draw_position.x,
-                        draw_position.y,
-                        font_size,
-                        color,
-                        opacity,
-                        jitter_amount,
-                        frame_index);
+    backtype::copy_revealed_raster(source, target, source_bounds, draw_position, reveal, opacity);
 
     const bool draw_cursor = checkbox_value(params[BACKTYPE_CURSOR_ENABLED], true) &&
                              backtype::cursor_visible(comp_seconds, slider_value(params[BACKTYPE_CURSOR_BLINK_SPEED], 2.0));
     if (draw_cursor) {
-        const std::string cursor = BACKTYPE_DEFAULT_CURSOR;
-        if (!cursor.empty()) {
-            backtype::render_text(target,
-                                  {cursor,
-                                   draw_position.x + visible_metrics.width + cursor_offset,
-                                   draw_position.y,
-                                   font_size,
-                                   color,
-                                   opacity});
-        }
+        const backtype::Color cursor_color = backtype::average_alpha_color(source, source_bounds);
+        const auto cursor_style = static_cast<backtype::CursorStyle>(
+            std::clamp(popup_value(params[BACKTYPE_CURSOR_STYLE], 1), 1, 3));
+        backtype::draw_cursor(target,
+                              {cursor_style,
+                               {draw_position.x + visible_width + cursor_offset, draw_position.y},
+                               stable_height,
+                               std::max(1.0, stable_height * 0.06),
+                               cursor_color,
+                               opacity});
     }
 
     return PF_Err_NONE;
-}
-
-PF_Err user_changed_param(PF_InData *in_data,
-                          PF_OutData *out_data,
-                          PF_ParamDef *params[],
-                          PF_UserChangedParamExtra *extra) {
-    if (!in_data || !out_data || !params || !extra) {
-        return PF_Err_BAD_CALLBACK_PARAM;
-    }
-
-    if (extra->param_index != BACKTYPE_TEXT) {
-        return PF_Err_NONE;
-    }
-
-    std::string text = text_from_sequence(in_data, BACKTYPE_DEFAULT_TEXT);
-    if (!backtype::edit_text_dialog(&text)) {
-        return PF_Err_NONE;
-    }
-
-    PF_Err err = set_sequence_text(in_data, out_data, text);
-    if (!err) {
-        out_data->out_flags |= PF_OutFlag_FORCE_RERENDER | PF_OutFlag_REFRESH_UI;
-    }
-    return err;
 }
 
 } // namespace
@@ -595,18 +553,12 @@ extern "C" DllExport PF_Err EffectMain(PF_Cmd cmd,
             break;
         case PF_Cmd_GLOBAL_SETUP:
             err = global_setup(out_data);
+            if (!err) {
+                err = ensure_aegp_registration(in_data);
+            }
             break;
         case PF_Cmd_PARAMS_SETUP:
             err = params_setup(in_data, out_data);
-            break;
-        case PF_Cmd_SEQUENCE_SETUP:
-            err = sequence_setup(in_data, out_data);
-            break;
-        case PF_Cmd_SEQUENCE_RESETUP:
-            err = sequence_resetup(in_data, out_data);
-            break;
-        case PF_Cmd_SEQUENCE_SETDOWN:
-            err = sequence_setdown(in_data, out_data);
             break;
         case PF_Cmd_RENDER:
             try {
@@ -616,9 +568,6 @@ extern "C" DllExport PF_Err EffectMain(PF_Cmd cmd,
             } catch (...) {
                 err = PF_Err_INTERNAL_STRUCT_DAMAGED;
             }
-            break;
-        case PF_Cmd_USER_CHANGED_PARAM:
-            err = user_changed_param(in_data, out_data, params, reinterpret_cast<PF_UserChangedParamExtra *>(extra));
             break;
         default:
             break;

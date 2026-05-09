@@ -1,6 +1,6 @@
 # BackType
 
-BackType is an After Effects effect for edit-style typing animations. It types text forward while the text pushes backward, so the line can stay centered or keep the newest character near one spot.
+BackType is an After Effects effect for edit-style typing animations on text layers. It reveals the layer text over time while pushing the rendered text backward, so the line can stay centered or keep the active character near one spot.
 
 It shows up under:
 
@@ -8,18 +8,18 @@ It shows up under:
 
 <img width="2500" height="1080" alt="BackType" src="https://github.com/user-attachments/assets/16a92092-1de8-40e7-ac6f-0d628e239394" />
 
-
 ## What it does
 
-- Renders typewriter-style text onto transparency
+- Uses the actual AE text layer as the source
+- Keeps the layer's rendered font, size, color, and styling
+- Reveals characters or words with `Progress`
 - Moves the text backward while typing
-- Supports a blinking cursor
-- Lets you control progress, size, color, position, direction, anchor mode, and opacity
+- Supports line, block, and underscore cursor styles
 - Uses Center Locked as the default anchor mode
 
-## [Install](https://github.com/williamm0/BackType/releases)
+## Install
 
-The current pre-release is macOS only.
+The current pre-release is macOS only. There is no Windows `.aex` release yet.
 
 ### macOS
 
@@ -37,43 +37,43 @@ This build is not signed or notarized. If macOS blocks it because of quarantine,
 xattr -dr com.apple.quarantine "/Library/Application Support/Adobe/Common/Plug-ins/7.0/MediaCore/BackType.plugin"
 ```
 
-## How to use on a solid
+## How to use
 
-1. Create a solid.
-2. Apply `Effect > jx plugins > BackType`.
-3. Click `Text > Edit Text...`.
-4. Type your text in the dialog and press OK.
-5. Keyframe `Progress` from 0 to 100.
+1. Create an After Effects text layer.
+2. Type and style the text normally in AE.
+3. Apply `Effect > jx plugins > BackType` to that text layer.
+4. Keyframe `Progress` from 0 to 100.
+5. Adjust `Anchor Mode`, `Backward Motion`, `Direction`, and `Position` as needed.
 
-Spaces and basic punctuation are stored in the plugin text data. Empty text renders nothing and should not crash.
+BackType no longer has its own text field. Edit the text layer's Source Text instead.
 
-## How to use on a text layer
+## Controls
 
-You can apply BackType directly to an After Effects text layer.
-
-For v0.1.2-pre.2, the reliable mode is still `Text Source > Plugin Text`. You can apply BackType to a solid or directly to an AE text layer, but it does not read the text layer's Source Text yet. `Layer Text` is present so the UI is ready for that mode later, but it currently falls back to the plugin's editable text.
+- `Progress`: reveals the text from 0 to 100.
+- `Anchor Mode`: Center Locked is the default.
+- `Backward Motion`: controls how hard the text pushes backward.
+- `Direction`: moves the line left, right, up, or down while revealing.
+- `Character Reveal Mode`: character or word reveal.
+- `Cursor Style`: line, block, or underscore.
+- `Character Fade-In`: fades the newest revealed character without changing layout.
+- `Push Easing`: changes how the backward push ramps in.
+- `Opacity`: fades the rendered result.
 
 ## Notes
 
-- Center Locked is now the default anchor mode.
-- Descender letters such as `y`, `g`, `j`, `p`, and `q` no longer shift the line upward while typing.
-- v0.1.2-pre.2 removes the hidden arbitrary text parameter too. Text editing now uses a normal AE button, a small macOS dialog, and per-effect sequence data.
-- Unicode text is stored as UTF-8, but font fallback and non-ASCII editing still need more real AE testing.
-- `Pop Amount` is still a parameter, but the render-side pop animation is not finished yet.
+- Descender letters like `y`, `g`, `j`, `p`, and `q` should no longer move the whole line up or down while typing.
+- Cursor blinking does not affect layout.
+- Empty text renders nothing.
+- This version reads Source Text through the AE SDK, but it preserves styling by using the text layer's rendered pixels. Character reveal uses cached approximate advance widths, so unusual fonts, ligatures, RTL text, or multi-line layouts may need more testing in real AE projects.
+- Applying BackType to a solid now renders nothing because there is no text layer Source Text to use.
 
 ## Windows
 
-There is no Windows release yet. No `.aex` file is included in the current pre-release.
+Windows is not released yet. When a real `BackType.aex` build exists, it should be copied into the normal After Effects plug-ins folder, but no `.aex` is included in this pre-release.
 
 ## Current state
 
-This is v0.1.2-pre.2, so treat it as an early build.
-
-Released target:
-
-- macOS `.plugin`
-
-Windows is not released yet.
+This is v0.1.3-pre.1. Treat it as a macOS pre-release that still needs real AE runtime verification.
 
 ## License
 

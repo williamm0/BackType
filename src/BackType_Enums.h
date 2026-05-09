@@ -21,9 +21,16 @@ enum class RevealMode {
     Word = 2
 };
 
-enum class TextSource {
-    PluginText = 1,
-    LayerText = 2
+enum class CursorStyle {
+    Line = 1,
+    Block = 2,
+    Underscore = 3
+};
+
+enum class PushEasing {
+    Linear = 1,
+    EaseOut = 2,
+    EaseInOut = 3
 };
 
 } // namespace backtype

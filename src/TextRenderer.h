@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <string>
 
 namespace backtype {
 
@@ -27,27 +26,6 @@ struct PixelBuffer {
     int rowbytes = 0;
     PixelFormat format = PixelFormat::Argb8;
 };
-
-struct TextMetrics {
-    double width = 0.0;
-    double height = 0.0;
-    double ascent = 0.0;
-    double descent = 0.0;
-    double left = 0.0;
-    double right = 0.0;
-};
-
-struct TextRenderRequest {
-    std::string text;
-    double x = 0.0;
-    double y = 0.0;
-    double font_size = 72.0;
-    Color color;
-    double opacity = 1.0;
-};
-
-TextMetrics measure_text(const std::string &text, double font_size);
-bool render_text(const PixelBuffer &target, const TextRenderRequest &request);
 
 inline double clamp_unit(double value) {
     if (!std::isfinite(value)) {

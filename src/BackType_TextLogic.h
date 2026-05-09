@@ -41,6 +41,5 @@ DrawPosition compute_draw_position(const LayoutInput &input,
                                    const TextBounds &full_bounds);
 
 bool cursor_visible(double comp_time_seconds, double blink_speed);
-double deterministic_jitter(std::size_t character_index, long frame_index, double amount);
 
 } // namespace backtype

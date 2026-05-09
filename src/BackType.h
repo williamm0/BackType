@@ -6,17 +6,5 @@
 
 #define BACKTYPE_VERSION_MAJOR 0
 #define BACKTYPE_VERSION_MINOR 1
-#define BACKTYPE_VERSION_PATCH 2
-#define BACKTYPE_VERSION_BUILD 2
-
-#define BACKTYPE_DEFAULT_TEXT "BackType"
-#define BACKTYPE_DEFAULT_CURSOR "|"
-
-/*
-    Recent After Effects SDKs expose native string parameters. If your SDK uses a
-    different field name for the string value, define BACKTYPE_AE_STRING_VALUE in
-    the project settings instead of editing the render code.
-*/
-#ifndef BACKTYPE_AE_STRING_VALUE
-#define BACKTYPE_AE_STRING_VALUE(PARAM_PTR) ((PARAM_PTR)->u.str_d.value)
-#endif
+#define BACKTYPE_VERSION_PATCH 3
+#define BACKTYPE_VERSION_BUILD 1

@@ -73,12 +73,6 @@ int main() {
     expect_true(!cursor_visible(0.75, 2.0), "cursor hidden in second half of blink cycle");
     expect_true(cursor_visible(10.0, 0.0), "cursor stays visible when blink speed is zero");
 
-    const double jitter_a = deterministic_jitter(3, 0, 15.0);
-    const double jitter_b = deterministic_jitter(3, 0, 15.0);
-    const double jitter_c = deterministic_jitter(4, 0, 15.0);
-    expect_near(jitter_a, jitter_b, 0.000001, "jitter is stable for same character and frame");
-    expect_true(std::fabs(jitter_a - jitter_c) > 0.000001, "jitter differs by character index");
-
     std::cout << "BackType_TextLogicTests passed\n";
     return 0;
 }

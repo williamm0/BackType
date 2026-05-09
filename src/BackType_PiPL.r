@@ -7,14 +7,10 @@
     #include <AE_General.r>
 #endif
 
-#ifndef PF_OutFlag_PIX_INDEPENDENT
-    #define PF_OutFlag_PIX_INDEPENDENT 0x00000400
-#endif
-
 #define BACKTYPE_VERSION_MAJOR 0
 #define BACKTYPE_VERSION_MINOR 1
-#define BACKTYPE_VERSION_PATCH 2
-#define BACKTYPE_VERSION_BUILD 2
+#define BACKTYPE_VERSION_PATCH 3
+#define BACKTYPE_VERSION_BUILD 1
 
 resource 'PiPL' (16000) {
     {
@@ -39,7 +35,7 @@ resource 'PiPL' (16000) {
         },
         AE_Effect_Info_Flags { 0 },
         AE_Effect_Global_OutFlags {
-            PF_OutFlag_PIX_INDEPENDENT
+            0
         },
         AE_Effect_Global_OutFlags_2 {
             0
