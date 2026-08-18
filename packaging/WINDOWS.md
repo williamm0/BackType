@@ -1,18 +1,17 @@
 # Windows build notes
 
-BackType's Windows target is ready in CMake, but it needs a Windows machine with Visual Studio, CMake, Ninja or MSBuild, and the Adobe After Effects SDK.
+BackType's Windows target supports x64 and ARM64. It requires Windows, Visual Studio 2022, CMake, and the Adobe After Effects SDK.
 
 Set these paths first:
 
 ```powershell
 $env:AE_SDK_ROOT = "C:\SDKs\AfterEffectsSDK"
-$env:AE_PIPL_TOOL = "C:\SDKs\AfterEffectsSDK\...\cnvtpipl.exe"
 ```
 
 Then build:
 
 ```powershell
-cmake -S . -B build\windows -G "Visual Studio 17 2022" -A x64 -DAE_SDK_ROOT="$env:AE_SDK_ROOT" -DAE_PIPL_TOOL="$env:AE_PIPL_TOOL"
+cmake -S . -B build\windows -G "Visual Studio 17 2022" -A x64 -DBACKTYPE_BUILD_AE_PLUGIN=ON -DAE_SDK_ROOT="$env:AE_SDK_ROOT"
 cmake --build build\windows --config Release
 ```
 
@@ -22,9 +21,12 @@ Expected output:
 build\windows\Release\BackType.aex
 ```
 
-Create the Windows zip only after `BackType.aex` exists:
+The build preprocesses `BackType_PiPL.r` with MSVC, runs the SDK-provided `PiPLtool.exe`, and embeds the result in `BackType.aex`. Override `AE_PIPL_TOOL` only if the tool is outside `Examples\Resources`.
+
+For native Windows on ARM, configure with `-A ARM64`.
+
+Create the Windows archive after `BackType.aex` exists:
 
 ```powershell
-$env:WINDOWS_ARTIFACT = "build\windows\Release\BackType.aex"
-bash packaging/package_release.sh
+cmake --build build\windows --config Release --target package
 ```

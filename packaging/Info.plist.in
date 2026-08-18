@@ -18,6 +18,6 @@
   <key>CFBundleShortVersionString</key>
   <string>@PROJECT_VERSION@</string>
   <key>CFBundleVersion</key>
-  <string>@PROJECT_VERSION@</string>
+  <string>@BACKTYPE_BUNDLE_VERSION@</string>
 </dict>
 </plist>

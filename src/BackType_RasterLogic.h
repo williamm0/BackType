@@ -5,8 +5,6 @@
 #include "TextRenderer.h"
 
 #include <cstddef>
-#include <cstdint>
-#include <string>
 
 namespace backtype {
 
@@ -17,13 +15,11 @@ struct RasterBounds {
     int max_x = 0;
     int max_y = 0;
 
-    int width() const;
-    int height() const;
+    int width() const noexcept;
+    int height() const noexcept;
 };
 
 struct RasterRevealState {
-    std::size_t visible_bytes = 0;
-    std::size_t previous_visible_bytes = 0;
     double visible_fraction = 0.0;
     double previous_fraction = 0.0;
     double newest_opacity = 1.0;
@@ -31,16 +27,20 @@ struct RasterRevealState {
 
 struct CursorDrawRequest {
     CursorStyle style = CursorStyle::Line;
+    Direction direction = Direction::MoveLeft;
     DrawPosition position;
-    double line_height = 0.0;
+    double content_width = 0.0;
+    double content_height = 0.0;
     double thickness = 2.0;
     Color color;
     double opacity = 1.0;
 };
 
-RasterRevealState compute_raster_reveal(const std::string &text,
+RasterRevealState compute_raster_reveal(const PixelBuffer &source,
+                                        const RasterBounds &source_bounds,
                                         double progress,
                                         RevealMode mode,
+                                        Direction direction,
                                         double character_fade_percent);
 
 RasterBounds find_alpha_bounds(const PixelBuffer &source);
@@ -56,7 +56,6 @@ void copy_revealed_raster(const PixelBuffer &source,
                           DrawPosition target_position,
                           const RasterRevealState &reveal,
                           Direction direction,
-                          double render_padding,
                           double opacity);
 
 DrawPosition cursor_position_for_reveal(DrawPosition target_position,

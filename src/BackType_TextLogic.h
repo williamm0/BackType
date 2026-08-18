@@ -2,9 +2,6 @@
 
 #include "BackType_Enums.h"
 
-#include <cstddef>
-#include <string>
-
 namespace backtype {
 
 struct TextBounds {
@@ -25,21 +22,13 @@ struct DrawPosition {
     double y = 0.0;
 };
 
-double clamp_progress(double progress);
-double clamp_percent(double value);
-
-std::size_t utf8_codepoint_count(const std::string &text);
-std::size_t byte_index_for_codepoint_count(const std::string &text, std::size_t codepoint_count);
-
-std::size_t visible_character_count(const std::string &text, double progress);
-std::size_t visible_word_character_count(const std::string &text, double progress);
-std::size_t visible_text_byte_count(const std::string &text, double progress, RevealMode mode);
-std::string visible_text(const std::string &text, double progress, RevealMode mode);
+double clamp_progress(double progress) noexcept;
+double clamp_percent(double value) noexcept;
 
 DrawPosition compute_draw_position(const LayoutInput &input,
                                    const TextBounds &visible_bounds,
                                    const TextBounds &full_bounds);
 
-bool cursor_visible(double comp_time_seconds, double blink_speed);
+bool cursor_visible(double comp_time_seconds, double blink_speed) noexcept;
 
 } // namespace backtype

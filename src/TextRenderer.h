@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 
 namespace backtype {
@@ -27,118 +28,58 @@ struct PixelBuffer {
     PixelFormat format = PixelFormat::Argb8;
 };
 
-inline double clamp_unit(double value) {
+constexpr double kArgb16ChannelMax = 32768.0;
+
+inline double clamp_unit(double value) noexcept {
     if (!std::isfinite(value)) {
         return 0.0;
     }
     return std::clamp(value, 0.0, 1.0);
 }
 
-inline void clear_target(const PixelBuffer &target) {
-    if (!target.data || target.width <= 0 || target.height <= 0 || target.rowbytes <= 0) {
+inline std::size_t bytes_per_pixel(PixelFormat format) noexcept {
+    switch (format) {
+        case PixelFormat::Argb16:
+            return sizeof(std::uint16_t) * 4U;
+        case PixelFormat::ArgbFloat:
+            return sizeof(float) * 4U;
+        case PixelFormat::Argb8:
+        default:
+            return sizeof(std::uint8_t) * 4U;
+    }
+}
+
+inline bool valid_pixel_buffer(const PixelBuffer &buffer) noexcept {
+    if (!buffer.data || buffer.width <= 0 || buffer.height <= 0 || buffer.rowbytes == 0) {
+        return false;
+    }
+    const auto absolute_rowbytes = static_cast<std::uint64_t>(
+        buffer.rowbytes < 0 ? -static_cast<std::int64_t>(buffer.rowbytes) : buffer.rowbytes);
+    const auto required = static_cast<std::uint64_t>(buffer.width) * bytes_per_pixel(buffer.format);
+    return absolute_rowbytes >= required;
+}
+
+inline std::uint8_t *pixel_row(const PixelBuffer &buffer, int y) noexcept {
+    return static_cast<std::uint8_t *>(buffer.data) +
+           static_cast<std::ptrdiff_t>(y) * static_cast<std::ptrdiff_t>(buffer.rowbytes);
+}
+
+inline void clear_target(const PixelBuffer &target) noexcept {
+    if (!valid_pixel_buffer(target)) {
         return;
     }
-
+    const std::size_t active_bytes = static_cast<std::size_t>(target.width) * bytes_per_pixel(target.format);
     for (int y = 0; y < target.height; ++y) {
-        auto *row = static_cast<std::uint8_t *>(target.data) + y * target.rowbytes;
-        std::fill(row, row + target.rowbytes, 0);
+        std::fill_n(pixel_row(target, y), active_bytes, std::uint8_t{0});
     }
 }
 
-inline void alpha_over(double src_r,
-                       double src_g,
-                       double src_b,
-                       double src_a,
-                       double &dst_r,
-                       double &dst_g,
-                       double &dst_b,
-                       double &dst_a) {
-    src_a = clamp_unit(src_a);
-    const double out_a = src_a + dst_a * (1.0 - src_a);
-    if (out_a <= 0.0) {
-        dst_r = 0.0;
-        dst_g = 0.0;
-        dst_b = 0.0;
-        dst_a = 0.0;
-        return;
-    }
-
-    dst_r = (src_r * src_a + dst_r * dst_a * (1.0 - src_a)) / out_a;
-    dst_g = (src_g * src_a + dst_g * dst_a * (1.0 - src_a)) / out_a;
-    dst_b = (src_b * src_a + dst_b * dst_a * (1.0 - src_a)) / out_a;
-    dst_a = out_a;
-}
-
-inline std::uint8_t unit_to_u8(double value) {
+inline std::uint8_t unit_to_u8(double value) noexcept {
     return static_cast<std::uint8_t>(std::lround(clamp_unit(value) * 255.0));
 }
 
-inline std::uint16_t unit_to_u16(double value) {
-    return static_cast<std::uint16_t>(std::lround(clamp_unit(value) * 65535.0));
-}
-
-inline void composite_rgba8_pixel(const PixelBuffer &target,
-                                  int x,
-                                  int y,
-                                  std::uint8_t premul_r,
-                                  std::uint8_t premul_g,
-                                  std::uint8_t premul_b,
-                                  std::uint8_t alpha) {
-    if (!target.data || target.rowbytes <= 0 || x < 0 || y < 0 ||
-        x >= target.width || y >= target.height || alpha == 0) {
-        return;
-    }
-
-    const double src_a = static_cast<double>(alpha) / 255.0;
-    const double src_r = src_a > 0.0 ? (static_cast<double>(premul_r) / 255.0) / src_a : 0.0;
-    const double src_g = src_a > 0.0 ? (static_cast<double>(premul_g) / 255.0) / src_a : 0.0;
-    const double src_b = src_a > 0.0 ? (static_cast<double>(premul_b) / 255.0) / src_a : 0.0;
-
-    auto *row = static_cast<std::uint8_t *>(target.data) + y * target.rowbytes;
-
-    if (target.format == PixelFormat::Argb8) {
-        if ((x + 1) * 4 > target.rowbytes) {
-            return;
-        }
-        auto *pixel = row + x * 4;
-        double dst_a = static_cast<double>(pixel[0]) / 255.0;
-        double dst_r = static_cast<double>(pixel[1]) / 255.0;
-        double dst_g = static_cast<double>(pixel[2]) / 255.0;
-        double dst_b = static_cast<double>(pixel[3]) / 255.0;
-        alpha_over(src_r, src_g, src_b, src_a, dst_r, dst_g, dst_b, dst_a);
-        pixel[0] = unit_to_u8(dst_a);
-        pixel[1] = unit_to_u8(dst_r);
-        pixel[2] = unit_to_u8(dst_g);
-        pixel[3] = unit_to_u8(dst_b);
-    } else if (target.format == PixelFormat::Argb16) {
-        if ((x + 1) * 8 > target.rowbytes) {
-            return;
-        }
-        auto *pixel = reinterpret_cast<std::uint16_t *>(row + x * 8);
-        double dst_a = static_cast<double>(pixel[0]) / 65535.0;
-        double dst_r = static_cast<double>(pixel[1]) / 65535.0;
-        double dst_g = static_cast<double>(pixel[2]) / 65535.0;
-        double dst_b = static_cast<double>(pixel[3]) / 65535.0;
-        alpha_over(src_r, src_g, src_b, src_a, dst_r, dst_g, dst_b, dst_a);
-        pixel[0] = unit_to_u16(dst_a);
-        pixel[1] = unit_to_u16(dst_r);
-        pixel[2] = unit_to_u16(dst_g);
-        pixel[3] = unit_to_u16(dst_b);
-    } else {
-        if ((x + 1) * 16 > target.rowbytes) {
-            return;
-        }
-        auto *pixel = reinterpret_cast<float *>(row + x * 16);
-        double dst_a = pixel[0];
-        double dst_r = pixel[1];
-        double dst_g = pixel[2];
-        double dst_b = pixel[3];
-        alpha_over(src_r, src_g, src_b, src_a, dst_r, dst_g, dst_b, dst_a);
-        pixel[0] = static_cast<float>(clamp_unit(dst_a));
-        pixel[1] = static_cast<float>(clamp_unit(dst_r));
-        pixel[2] = static_cast<float>(clamp_unit(dst_g));
-        pixel[3] = static_cast<float>(clamp_unit(dst_b));
-    }
+inline std::uint16_t unit_to_ae_u16(double value) noexcept {
+    return static_cast<std::uint16_t>(std::lround(clamp_unit(value) * kArgb16ChannelMax));
 }
 
 } // namespace backtype

@@ -1,29 +1,22 @@
-#include "../src/BackType_TextLogic.h"
+#include "BackType_TextLogic.h"
 
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
-#include <string>
+#include <limits>
 
 namespace {
 
 void expect_true(bool condition, const char *message) {
     if (!condition) {
-        std::cerr << "FAIL: " << message << "\n";
-        std::exit(1);
-    }
-}
-
-void expect_eq(std::size_t actual, std::size_t expected, const char *message) {
-    if (actual != expected) {
-        std::cerr << "FAIL: " << message << " expected " << expected << " got " << actual << "\n";
+        std::cerr << "FAIL: " << message << '\n';
         std::exit(1);
     }
 }
 
 void expect_near(double actual, double expected, double tolerance, const char *message) {
     if (std::fabs(actual - expected) > tolerance) {
-        std::cerr << "FAIL: " << message << " expected " << expected << " got " << actual << "\n";
+        std::cerr << "FAIL: " << message << " expected " << expected << " got " << actual << '\n';
         std::exit(1);
     }
 }
@@ -33,45 +26,56 @@ void expect_near(double actual, double expected, double tolerance, const char *m
 int main() {
     using namespace backtype;
 
-    expect_eq(visible_character_count("hello", 0.0), 0, "0 percent reveals no characters");
-    expect_eq(visible_character_count("hello", 10.0), 0, "10 percent floors visible characters");
-    expect_eq(visible_character_count("hello", 25.0), 1, "25 percent reveals one character");
-    expect_eq(visible_character_count("hello", 50.0), 2, "50 percent reveals two characters");
-    expect_eq(visible_character_count("hello", 100.0), 5, "100 percent reveals all characters");
-    expect_eq(visible_character_count("hello", 140.0), 5, "progress clamps above 100");
+    expect_near(clamp_progress(-10.0), 0.0, 0.0, "progress clamps below zero");
+    expect_near(clamp_progress(140.0), 100.0, 0.0, "progress clamps above 100");
+    expect_near(clamp_progress(std::numeric_limits<double>::quiet_NaN()), 0.0, 0.0,
+                "non-finite progress is safe");
+    expect_near(clamp_percent(std::numeric_limits<double>::infinity()), 0.0, 0.0,
+                "non-finite percentages are safe");
 
-    expect_eq(visible_word_character_count("hello brave world", 1.0), 5, "word mode reveals first word once progress starts");
-    expect_eq(visible_word_character_count("hello brave world", 50.0), 11, "word mode reveals complete words");
-    expect_eq(visible_word_character_count("hello brave world", 100.0), 17, "word mode reveals all words");
-
-    const TextBounds bounds{120.0, 40.0};
-    const LayoutInput default_layout{};
-    expect_true(default_layout.anchor_mode == AnchorMode::CenterLocked, "default anchor mode is center locked");
-
-    const LayoutInput newest_left{AnchorMode::NewestCharacterLocked, Direction::MoveLeft, 200.0, 100.0, 100.0};
-    const DrawPosition newest_left_pos = compute_draw_position(newest_left, bounds, bounds);
-    expect_near(newest_left_pos.x, 80.0, 0.001, "newest locked move-left shifts by visible width");
-    expect_near(newest_left_pos.y, 80.0, 0.001, "move-left keeps visual center on the Y anchor");
-
-    const LayoutInput center_locked{AnchorMode::CenterLocked, Direction::MoveLeft, 200.0, 100.0, 100.0};
-    const DrawPosition center_pos = compute_draw_position(center_locked, bounds, bounds);
-    expect_near(center_pos.x, 140.0, 0.001, "center locked centers visible text");
-    expect_near(center_pos.y, 80.0, 0.001, "center locked keeps the visual center on the Y anchor");
-
-    const LayoutInput first_right{AnchorMode::FirstCharacterLocked, Direction::MoveRight, 200.0, 100.0, 300.0};
-    const DrawPosition first_right_pos = compute_draw_position(first_right, bounds, bounds);
-    expect_near(first_right_pos.x, 200.0, 0.001, "first character locked ignores backward amount");
-    expect_near(first_right_pos.y, 80.0, 0.001, "first character locked still centers vertically");
-
+    const TextBounds visible_bounds{120.0, 20.0};
     const TextBounds full_bounds{300.0, 40.0};
-    const LayoutInput last_left{AnchorMode::LastCharacterLocked, Direction::MoveLeft, 200.0, 100.0, 100.0};
-    const DrawPosition last_left_pos = compute_draw_position(last_left, bounds, full_bounds);
-    expect_near(last_left_pos.x, -100.0, 0.001, "last character locked uses full text width");
-    expect_near(last_left_pos.y, 80.0, 0.001, "last character locked still centers vertically");
+    const LayoutInput default_layout{};
+    expect_true(default_layout.anchor_mode == AnchorMode::CenterLocked, "default anchor is center locked");
 
-    expect_true(cursor_visible(0.25, 2.0), "cursor visible in first half of blink cycle");
-    expect_true(!cursor_visible(0.75, 2.0), "cursor hidden in second half of blink cycle");
-    expect_true(cursor_visible(10.0, 0.0), "cursor stays visible when blink speed is zero");
+    const DrawPosition newest_left = compute_draw_position(
+        {AnchorMode::NewestCharacterLocked, Direction::MoveLeft, 200.0, 100.0, 100.0},
+        visible_bounds,
+        full_bounds);
+    expect_near(newest_left.x, 80.0, 0.001, "newest locked move-left shifts by visible width");
+    expect_near(newest_left.y, 80.0, 0.001, "horizontal layouts keep a stable vertical center");
+
+    const DrawPosition center_left = compute_draw_position(
+        {AnchorMode::CenterLocked, Direction::MoveLeft, 200.0, 100.0, 100.0},
+        visible_bounds,
+        full_bounds);
+    expect_near(center_left.x, 140.0, 0.001, "horizontal center lock uses visible width");
+    expect_near(center_left.y, 80.0, 0.001, "horizontal center lock uses full line height");
+
+    const DrawPosition center_up = compute_draw_position(
+        {AnchorMode::CenterLocked, Direction::MoveUp, 200.0, 100.0, 100.0},
+        visible_bounds,
+        full_bounds);
+    expect_near(center_up.x, 50.0, 0.001, "vertical center lock centers the full text width");
+    expect_near(center_up.y, 90.0, 0.001, "vertical center lock centers the visible height");
+
+    const DrawPosition first_right = compute_draw_position(
+        {AnchorMode::FirstCharacterLocked, Direction::MoveRight, 200.0, 100.0, 300.0},
+        visible_bounds,
+        full_bounds);
+    expect_near(first_right.x, 200.0, 0.001, "first-character lock ignores backward amount");
+
+    const DrawPosition last_left = compute_draw_position(
+        {AnchorMode::LastCharacterLocked, Direction::MoveLeft, 200.0, 100.0, 100.0},
+        visible_bounds,
+        full_bounds);
+    expect_near(last_left.x, -100.0, 0.001, "last-character lock uses full text width");
+
+    expect_true(cursor_visible(0.25, 2.0), "cursor is visible in the first half of its cycle");
+    expect_true(!cursor_visible(0.75, 2.0), "cursor is hidden in the second half of its cycle");
+    expect_true(cursor_visible(10.0, 0.0), "zero blink speed keeps the cursor visible");
+    expect_true(cursor_visible(10.0, std::numeric_limits<double>::quiet_NaN()),
+                "invalid blink speed keeps the cursor visible");
 
     std::cout << "BackType_TextLogicTests passed\n";
     return 0;

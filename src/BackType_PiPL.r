@@ -15,7 +15,11 @@ resource 'PiPL' (16000) {
         Category { "jx plugins" },
 
 #ifdef AE_OS_WIN
+    #if defined(AE_PROC_ARM64)
+        CodeWinARM64 { "EffectMain" },
+    #else
         CodeWin64X86 { "EffectMain" },
+    #endif
 #else
         CodeMacIntel64 { "EffectMain" },
         CodeMacARM64 { "EffectMain" },
@@ -26,10 +30,10 @@ resource 'PiPL' (16000) {
         AE_Effect_Version { BACKTYPE_AE_EFFECT_VERSION },
         AE_Effect_Info_Flags { 0 },
         AE_Effect_Global_OutFlags {
-            0
+            0x02000200
         },
         AE_Effect_Global_OutFlags_2 {
-            0
+            0x08000000
         },
         AE_Effect_Match_Name { "jx.BackType" },
         AE_Reserved_Info { 0 },

@@ -1,17 +1,17 @@
-#include "../src/BackType_RasterLogic.h"
-#include "../src/BackType_TextLogic.h"
-#include "../src/TextRenderer.h"
+#include "BackType_RasterLogic.h"
 
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
 #include <iostream>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace {
 
 void fail(const std::string &message) {
-    std::cerr << "FAIL: " << message << "\n";
+    std::cerr << "FAIL: " << message << '\n';
     std::exit(1);
 }
 
@@ -21,29 +21,52 @@ void expect_true(bool condition, const std::string &message) {
     }
 }
 
-void expect_eq(std::size_t actual, std::size_t expected, const std::string &message) {
-    if (actual != expected) {
-        fail(message + " expected " + std::to_string(expected) + " got " + std::to_string(actual));
-    }
-}
-
 void expect_near(double actual, double expected, double tolerance, const std::string &message) {
     if (std::fabs(actual - expected) > tolerance) {
         fail(message + " expected " + std::to_string(expected) + " got " + std::to_string(actual));
     }
 }
 
-std::uint8_t alpha_at(const std::vector<std::uint8_t> &pixels, int rowbytes, int x, int y) {
-    return pixels[static_cast<std::size_t>(y * rowbytes + x * 4)];
+std::size_t byte_offset(int rowbytes, int x, int y, std::size_t bytes_per_pixel) {
+    return static_cast<std::size_t>(y * rowbytes) + static_cast<std::size_t>(x) * bytes_per_pixel;
 }
 
-void set_pixel(std::vector<std::uint8_t> &pixels, int rowbytes, int x, int y,
-               std::uint8_t a, std::uint8_t r, std::uint8_t g, std::uint8_t b) {
-    auto *pixel = pixels.data() + y * rowbytes + x * 4;
-    pixel[0] = a;
-    pixel[1] = r;
-    pixel[2] = g;
-    pixel[3] = b;
+void set_argb8(std::vector<std::uint8_t> &pixels,
+               int rowbytes,
+               int x,
+               int y,
+               std::uint8_t a,
+               std::uint8_t r,
+               std::uint8_t g,
+               std::uint8_t b) {
+    const std::size_t offset = byte_offset(rowbytes, x, y, 4U);
+    pixels[offset] = a;
+    pixels[offset + 1U] = r;
+    pixels[offset + 2U] = g;
+    pixels[offset + 3U] = b;
+}
+
+std::uint8_t argb8_channel(const std::vector<std::uint8_t> &pixels,
+                           int rowbytes,
+                           int x,
+                           int y,
+                           int channel) {
+    return pixels[byte_offset(rowbytes, x, y, 4U) + static_cast<std::size_t>(channel)];
+}
+
+void set_argb16(std::vector<std::uint16_t> &pixels,
+                int width,
+                int x,
+                int y,
+                std::uint16_t a,
+                std::uint16_t r,
+                std::uint16_t g,
+                std::uint16_t b) {
+    const std::size_t offset = static_cast<std::size_t>((y * width + x) * 4);
+    pixels[offset] = a;
+    pixels[offset + 1U] = r;
+    pixels[offset + 2U] = g;
+    pixels[offset + 3U] = b;
 }
 
 } // namespace
@@ -51,141 +74,136 @@ void set_pixel(std::vector<std::uint8_t> &pixels, int rowbytes, int x, int y,
 int main() {
     using namespace backtype;
 
-    const RasterRevealState half = compute_raster_reveal("hello", 50.0, RevealMode::Character, 0.0);
-    expect_eq(half.visible_bytes, 2, "character reveal uses floored visible character count");
-    expect_true(half.visible_fraction > 0.4 && half.visible_fraction < 0.55,
-                "visible fraction tracks approximate character advances");
-    expect_near(half.newest_opacity, 1.0, 0.0001, "fade disabled keeps newest character opaque");
-
-    const RasterRevealState spaced = compute_raster_reveal("hi, you", 50.0, RevealMode::Character, 100.0);
-    expect_eq(spaced.visible_bytes, 3, "spaces and punctuation count deterministically");
-    expect_true(spaced.previous_fraction < spaced.visible_fraction, "newest character has its own reveal span");
-    expect_true(spaced.newest_opacity >= 0.0 && spaced.newest_opacity <= 1.0,
-                "newest opacity is clamped");
-
-    constexpr int width = 12;
-    constexpr int height = 8;
+    constexpr int width = 18;
+    constexpr int height = 10;
     constexpr int rowbytes = width * 4;
-    std::vector<std::uint8_t> pixels(static_cast<std::size_t>(height * rowbytes), 0);
-    set_pixel(pixels, rowbytes, 3, 2, 255, 200, 210, 220);
-    set_pixel(pixels, rowbytes, 8, 5, 128, 100, 110, 120);
+    std::vector<std::uint8_t> source_pixels(static_cast<std::size_t>(height * rowbytes), 0U);
 
-    PixelBuffer source{pixels.data(), width, height, rowbytes, PixelFormat::Argb8};
+    for (int y = 2; y <= 6; ++y) {
+        for (int x = 2; x <= 4; ++x) {
+            set_argb8(source_pixels, rowbytes, x, y, 255U, 200U, 100U, 50U);
+        }
+        for (int x = 7; x <= 9; ++x) {
+            set_argb8(source_pixels, rowbytes, x, y, 255U, 100U, 200U, 50U);
+        }
+        for (int x = 13; x <= 15; ++x) {
+            set_argb8(source_pixels, rowbytes, x, y, 255U, 50U, 100U, 200U);
+        }
+    }
+    set_argb8(source_pixels, rowbytes, 2, 2, 128U, 100U, 50U, 25U);
+
+    PixelBuffer source{source_pixels.data(), width, height, rowbytes, PixelFormat::Argb8};
     const RasterBounds bounds = find_alpha_bounds(source);
-    expect_true(bounds.found, "alpha bounds should find source text pixels");
-    expect_eq(static_cast<std::size_t>(bounds.min_x), 3, "bounds min x");
-    expect_eq(static_cast<std::size_t>(bounds.max_x), 8, "bounds max x");
-    expect_eq(static_cast<std::size_t>(bounds.min_y), 2, "bounds min y");
-    expect_eq(static_cast<std::size_t>(bounds.max_y), 5, "bounds max y");
+    expect_true(bounds.found && bounds.min_x == 2 && bounds.max_x == 15 &&
+                    bounds.min_y == 2 && bounds.max_y == 6,
+                "alpha bounds include every antialiased edge pixel");
+
+    const RasterRevealState half = compute_raster_reveal(
+        source, bounds, 50.0, RevealMode::Character, Direction::MoveLeft, 0.0);
+    expect_true(half.visible_fraction > 0.2 && half.visible_fraction < 0.3,
+                "character reveal snaps to a complete glyph run");
+
+    std::vector<std::uint8_t> left_pixels(static_cast<std::size_t>(height * rowbytes), 0U);
+    PixelBuffer left_target{left_pixels.data(), width, height, rowbytes, PixelFormat::Argb8};
+    copy_revealed_raster(source, left_target, bounds, {2.0, 2.0}, half, Direction::MoveLeft, 1.0);
+    expect_true(argb8_channel(left_pixels, rowbytes, 4, 4, 0) == 255U,
+                "the first glyph is copied through its final column");
+    expect_true(argb8_channel(left_pixels, rowbytes, 7, 4, 0) == 0U,
+                "the next glyph is not cut in half or revealed early");
+
+    const RasterRevealState right_half = compute_raster_reveal(
+        source, bounds, 50.0, RevealMode::Character, Direction::MoveRight, 0.0);
+    std::vector<std::uint8_t> right_pixels(static_cast<std::size_t>(height * rowbytes), 0U);
+    PixelBuffer right_target{right_pixels.data(), width, height, rowbytes, PixelFormat::Argb8};
+    copy_revealed_raster(source, right_target, bounds, {2.0, 2.0}, right_half, Direction::MoveRight, 1.0);
+    expect_true(argb8_channel(right_pixels, rowbytes, 4, 4, 0) == 255U,
+                "reverse reveal places the complete rightmost glyph at the requested draw position");
+    expect_true(argb8_channel(right_pixels, rowbytes, 7, 4, 0) == 0U,
+                "reverse reveal keeps the preceding glyph hidden");
+
+    const RasterRevealState first_word = compute_raster_reveal(
+        source, bounds, 1.0, RevealMode::Word, Direction::MoveLeft, 0.0);
+    expect_true(first_word.visible_fraction > half.visible_fraction,
+                "word mode groups nearby glyph runs and reveals the first word immediately");
+    expect_true(first_word.visible_fraction < 1.0, "word mode recognizes a larger inter-word gap");
+
+    const RasterRevealState fading = compute_raster_reveal(
+        source, bounds, 45.0, RevealMode::Character, Direction::MoveLeft, 100.0);
+    expect_true(fading.newest_opacity > 0.0 && fading.newest_opacity < 1.0,
+                "character fade produces a bounded partial opacity");
 
     const Color average = average_alpha_color(source, bounds);
-    expect_true(average.r > 0.0 && average.g > 0.0 && average.b > 0.0, "average text color is sampled");
+    expect_true(average.r > 0.0 && average.g > 0.0 && average.b > 0.0,
+                "average color unpremultiplies source samples");
 
-    std::vector<std::uint8_t> out_pixels(static_cast<std::size_t>(height * rowbytes), 0);
-    PixelBuffer target{out_pixels.data(), width, height, rowbytes, PixelFormat::Argb8};
-    copy_revealed_raster(source,
-                         target,
-                         bounds,
-                         {2.0, 1.0},
-                         half,
-                         Direction::MoveLeft,
-                         0.0,
-                         1.0);
-    const RasterBounds copied = find_alpha_bounds(target);
-    expect_true(copied.found, "revealed raster copy should write pixels");
-    expect_true(copied.min_y == 1 || copied.min_y == 4,
-                "copy keeps vertical placement independent of visible glyph bounds");
+    std::vector<std::uint8_t> overlap_pixels(static_cast<std::size_t>(height * rowbytes), 0U);
+    set_argb8(overlap_pixels, rowbytes, 5, 3, 128U, 128U, 0U, 0U);
+    PixelBuffer overlap_target{overlap_pixels.data(), width, height, rowbytes, PixelFormat::Argb8};
+    draw_cursor(overlap_target,
+                {CursorStyle::Block, Direction::MoveLeft, {5.0, 3.0}, 12.0, 4.0, 1.0,
+                 Color{0.0, 0.0, 1.0, 1.0}, 1.0});
+    expect_true(argb8_channel(overlap_pixels, rowbytes, 5, 3, 0) > 180U,
+                "cursor overlap increases premultiplied alpha");
+    expect_true(argb8_channel(overlap_pixels, rowbytes, 5, 3, 1) < 80U &&
+                    argb8_channel(overlap_pixels, rowbytes, 5, 3, 3) > 120U,
+                "premultiplied source-over blending preserves correct edge colors");
 
-    draw_cursor(target,
-                {CursorStyle::Line,
-                 {6.0, 1.0},
-                 10.0,
-                 4.0,
-                 average,
-                 1.0});
-    const RasterBounds with_cursor = find_alpha_bounds(target);
-    expect_true(with_cursor.max_x >= copied.max_x, "cursor draws at the active x position");
+    constexpr int deep_width = 4;
+    constexpr int deep_height = 3;
+    constexpr int deep_rowbytes = deep_width * 8;
+    std::vector<std::uint16_t> deep_source_pixels(
+        static_cast<std::size_t>(deep_width * deep_height * 4), 0U);
+    set_argb16(deep_source_pixels, deep_width, 1, 1, 32768U, 32768U, 16384U, 8192U);
+    PixelBuffer deep_source{deep_source_pixels.data(), deep_width, deep_height, deep_rowbytes, PixelFormat::Argb16};
+    const RasterBounds deep_bounds = find_alpha_bounds(deep_source);
+    expect_true(deep_bounds.found && deep_bounds.min_x == 1 && deep_bounds.min_y == 1,
+                "16-bpc alpha bounds use AE's 32768 channel maximum");
+    const RasterRevealState deep_full = compute_raster_reveal(
+        deep_source, deep_bounds, 100.0, RevealMode::Character, Direction::MoveLeft, 0.0);
+    std::vector<std::uint16_t> deep_target_pixels(
+        static_cast<std::size_t>(deep_width * deep_height * 4), 0U);
+    PixelBuffer deep_target{deep_target_pixels.data(), deep_width, deep_height, deep_rowbytes, PixelFormat::Argb16};
+    copy_revealed_raster(deep_source, deep_target, deep_bounds, {1.0, 1.0}, deep_full,
+                         Direction::MoveLeft, 1.0);
+    const std::size_t deep_offset = static_cast<std::size_t>((1 * deep_width + 1) * 4);
+    expect_true(deep_target_pixels[deep_offset] == 32768U &&
+                    deep_target_pixels[deep_offset + 2U] == 16384U,
+                "16-bpc copy preserves full and fractional channel values");
 
-    constexpr int reveal_width = 16;
-    constexpr int reveal_height = 12;
-    constexpr int reveal_rowbytes = reveal_width * 4;
-    std::vector<std::uint8_t> reveal_pixels(static_cast<std::size_t>(reveal_height * reveal_rowbytes), 0);
-    const RasterBounds reveal_bounds{true, 4, 3, 11, 8};
-    set_pixel(reveal_pixels, reveal_rowbytes, 4, 5, 255, 255, 0, 0);
-    set_pixel(reveal_pixels, reveal_rowbytes, 11, 5, 255, 0, 255, 0);
-    set_pixel(reveal_pixels, reveal_rowbytes, 7, 3, 255, 0, 0, 255);
-    set_pixel(reveal_pixels, reveal_rowbytes, 7, 8, 255, 255, 255, 0);
-    set_pixel(reveal_pixels, reveal_rowbytes, 3, 5, 255, 255, 255, 255);
-    PixelBuffer reveal_source{reveal_pixels.data(), reveal_width, reveal_height, reveal_rowbytes, PixelFormat::Argb8};
-    const RasterRevealState half_reveal = compute_raster_reveal("abcdefgh", 50.0, RevealMode::Character, 0.0);
+    const DrawPosition right_cursor = cursor_position_for_reveal(
+        {10.0, 20.0}, bounds, right_half, Direction::MoveRight, 3.0);
+    expect_near(right_cursor.x, 7.0, 0.001, "right-to-left cursor follows the active reveal edge");
+    const DrawPosition down_cursor = cursor_position_for_reveal(
+        {10.0, 20.0}, bounds, right_half, Direction::MoveDown, 3.0);
+    expect_near(down_cursor.y, 17.0, 0.001, "vertical cursor follows the active Y edge");
 
-    auto copied_alpha_for = [&](Direction direction, double padding, int x, int y) {
-        std::vector<std::uint8_t> reveal_out(static_cast<std::size_t>(reveal_height * reveal_rowbytes), 0);
-        PixelBuffer reveal_target{reveal_out.data(), reveal_width, reveal_height, reveal_rowbytes, PixelFormat::Argb8};
-        copy_revealed_raster(reveal_source,
-                             reveal_target,
-                             reveal_bounds,
-                             {4.0, 3.0},
-                             half_reveal,
-                             direction,
-                             padding,
-                             1.0);
-        return alpha_at(reveal_out, reveal_rowbytes, x, y);
-    };
-
-    expect_true(copied_alpha_for(Direction::MoveLeft, 0.0, 4, 5) > 0,
-                "move-left reveals from the left edge");
-    expect_true(copied_alpha_for(Direction::MoveLeft, 0.0, 11, 5) == 0,
-                "move-left hides the unrevealed right edge");
-    expect_true(copied_alpha_for(Direction::MoveRight, 0.0, 11, 5) > 0,
-                "move-right reveals from the right edge");
-    expect_true(copied_alpha_for(Direction::MoveRight, 0.0, 4, 5) == 0,
-                "move-right hides the unrevealed left edge");
-    expect_true(copied_alpha_for(Direction::MoveUp, 0.0, 7, 3) > 0,
-                "move-up reveals from the top edge");
-    expect_true(copied_alpha_for(Direction::MoveDown, 0.0, 7, 8) > 0,
-                "move-down reveals from the bottom edge");
-    expect_true(copied_alpha_for(Direction::MoveLeft, 0.0, 3, 5) == 0,
-                "zero padding leaves out pixels outside measured bounds");
-    expect_true(copied_alpha_for(Direction::MoveLeft, 2.0, 3, 5) > 0,
-                "render padding includes pixels just outside measured bounds");
-
-    const DrawPosition left_cursor = cursor_position_for_reveal({10.0, 20.0},
-                                                                reveal_bounds,
-                                                                half_reveal,
-                                                                Direction::MoveLeft,
-                                                                3.0);
-    const DrawPosition right_cursor = cursor_position_for_reveal({10.0, 20.0},
-                                                                 reveal_bounds,
-                                                                 half_reveal,
-                                                                 Direction::MoveRight,
-                                                                 3.0);
-    expect_true(left_cursor.x > right_cursor.x, "cursor follows the active reveal edge for opposite directions");
-
-    const std::string descender_cases[] = {
-        "hello",
-        "yoyo",
-        "gpgpgp",
-        "jumps quickly",
-        "WHY gym?",
-        "pqygj"};
-    for (const auto &sample : descender_cases) {
-        double reference_y = 0.0;
-        bool have_reference = false;
-        for (double progress = 10.0; progress <= 100.0; progress += 10.0) {
-            const RasterRevealState state = compute_raster_reveal(sample, progress, RevealMode::Character, 0.0);
-            const DrawPosition position = compute_draw_position(
-                {AnchorMode::CenterLocked, Direction::MoveLeft, 100.0, 80.0, 100.0},
-                {200.0 * state.visible_fraction, 40.0},
-                {200.0, 40.0});
-            if (!have_reference) {
-                reference_y = position.y;
-                have_reference = true;
-            } else {
-                expect_near(position.y, reference_y, 0.0001,
-                            "descender strings keep a stable vertical draw position: " + sample);
+    constexpr int thread_count = 8;
+    std::vector<std::vector<std::uint8_t>> threaded_outputs(
+        thread_count, std::vector<std::uint8_t>(static_cast<std::size_t>(height * rowbytes), 0U));
+    std::vector<std::thread> threads;
+    threads.reserve(thread_count);
+    for (int thread_index = 0; thread_index < thread_count; ++thread_index) {
+        threads.emplace_back([&, thread_index] {
+            PixelBuffer output{threaded_outputs[static_cast<std::size_t>(thread_index)].data(),
+                               width,
+                               height,
+                               rowbytes,
+                               PixelFormat::Argb8};
+            for (int iteration = 0; iteration < 100; ++iteration) {
+                clear_target(output);
+                const RasterRevealState state = compute_raster_reveal(
+                    source, bounds, 67.0, RevealMode::Character, Direction::MoveLeft, 35.0);
+                copy_revealed_raster(source, output, bounds, {2.0, 2.0}, state,
+                                     Direction::MoveLeft, 0.8);
             }
-        }
+        });
+    }
+    for (std::thread &thread : threads) {
+        thread.join();
+    }
+    for (int thread_index = 1; thread_index < thread_count; ++thread_index) {
+        expect_true(threaded_outputs[static_cast<std::size_t>(thread_index)] == threaded_outputs.front(),
+                    "parallel frames produce deterministic isolated output");
     }
 
     std::cout << "BackType_RasterLogicTests passed\n";

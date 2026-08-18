@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  core-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: >-
+          cmake -S . -B build/ci
+          -DBACKTYPE_BUILD_AE_PLUGIN=OFF
+          -DBACKTYPE_WARNINGS_AS_ERRORS=ON
+          -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build/ci --config Release --parallel
+      - name: Test
+        run: ctest --test-dir build/ci -C Release --output-on-failure
+
+  sanitizers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: >-
+          cmake -S . -B build/sanitize
+          -DBACKTYPE_BUILD_AE_PLUGIN=OFF
+          -DBACKTYPE_WARNINGS_AS_ERRORS=ON
+          -DBACKTYPE_ENABLE_ASAN=ON
+          -DBACKTYPE_ENABLE_UBSAN=ON
+          -DCMAKE_BUILD_TYPE=Debug
+      - name: Build
+        run: cmake --build build/sanitize --parallel
+      - name: Test
+        run: ctest --test-dir build/sanitize --output-on-failure

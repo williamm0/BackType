@@ -1,8 +1,9 @@
 #include "BackType_Strings.h"
+#include "BackType_Version.h"
 
 namespace backtype_strings {
 
-const char *kAbout = "BackType v0.1.3-pre.2\nText-layer backward typewriter effect.";
+const char *kAbout = "BackType v" BACKTYPE_VERSION_LABEL "\nMFR-safe backward typewriter effect.";
 const char *kProgress = "Progress";
 const char *kPositionX = "Position X";
 const char *kPositionY = "Position Y";
